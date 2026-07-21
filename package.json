@@ -18,5 +18,8 @@
     "workspaces:list": "npm query .workspace",
     "environment:check": "node --version && npm --version",
     "test": "echo \"No test suites have been configured yet.\""
+  },
+  "allowScripts": {
+    "unrs-resolver@1.12.2": true
   }
 }
