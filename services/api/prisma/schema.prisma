@@ -1,10 +1,10 @@
 generator client {
-  provider            = "prisma-client"
-  output              = "../src/generated/prisma"
-  runtime             = "nodejs"
-  moduleFormat        = "esm"
+  provider               = "prisma-client"
+  output                 = "../src/generated/prisma"
+  runtime                = "nodejs"
+  moduleFormat           = "esm"
   generatedFileExtension = "ts"
-  importFileExtension = "ts"
+  importFileExtension    = "ts"
 }
 
 datasource db {
@@ -50,53 +50,43 @@ model PromptTemplate {
 }
 
 model CallSession {
-  id                String              @id @default(uuid()) @db.Uuid
-  destinationNumber String              @db.VarChar(32)
-  promptSnapshot    String              @db.Text
-  promptTemplateId  String?             @db.Uuid
-  status            CallStatus          @default(DRAFT)
-  languageCode      String              @default("en-IN") @db.VarChar(16)
-  provider          String?             @db.VarChar(64)
-  providerCallId    String?             @unique @db.VarChar(191)
-  startedAt         DateTime?           @db.Timestamptz(3)
-  endedAt           DateTime?           @db.Timestamptz(3)
-  summary           String?             @db.Text
-  sentiment         SentimentLabel      @default(UNKNOWN)
-  failureReason     String?             @db.Text
-  createdAt         DateTime            @default(now()) @db.Timestamptz(3)
-  updatedAt         DateTime            @updatedAt @db.Timestamptz(3)
-
-  promptTemplate    PromptTemplate?     @relation(
-    fields: [promptTemplateId],
-    references: [id],
-    onDelete: SetNull
-  )
-
+  id                 String              @id @default(uuid()) @db.Uuid
+  destinationNumber  String              @db.VarChar(32)
+  promptSnapshot     String              @db.Text
+  promptTemplateId   String?             @db.Uuid
+  status             CallStatus          @default(DRAFT)
+  languageCode       String              @default("en-IN") @db.VarChar(16)
+  provider           String?             @db.VarChar(64)
+  providerCallId     String?             @unique @db.VarChar(191)
+  startedAt          DateTime?           @db.Timestamptz(3)
+  endedAt            DateTime?           @db.Timestamptz(3)
+  summary            String?             @db.Text
+  sentiment          SentimentLabel      @default(UNKNOWN)
+  failureReason      String?             @db.Text
+  createdAt          DateTime            @default(now()) @db.Timestamptz(3)
+  updatedAt          DateTime            @updatedAt @db.Timestamptz(3)
+  promptTemplate     PromptTemplate?     @relation(fields: [promptTemplateId], references: [id], onDelete: SetNull)
   transcriptSegments TranscriptSegment[]
 
+  @@index([promptTemplateId])
   @@index([status, createdAt])
   @@index([destinationNumber, createdAt])
   @@map("call_sessions")
 }
 
 model TranscriptSegment {
-  id            String             @id @default(uuid()) @db.Uuid
-  callSessionId String             @db.Uuid
+  id            String            @id @default(uuid()) @db.Uuid
+  callSessionId String            @db.Uuid
   sequence      Int
   speaker       TranscriptSpeaker
-  content       String             @db.Text
+  content       String            @db.Text
   confidence    Float?
-  sentiment     SentimentLabel     @default(UNKNOWN)
+  sentiment     SentimentLabel    @default(UNKNOWN)
   latencyMs     Int?
   startedAtMs   Int?
   endedAtMs     Int?
-  createdAt     DateTime           @default(now()) @db.Timestamptz(3)
-
-  callSession   CallSession        @relation(
-    fields: [callSessionId],
-    references: [id],
-    onDelete: Cascade
-  )
+  createdAt     DateTime          @default(now()) @db.Timestamptz(3)
+  callSession   CallSession       @relation(fields: [callSessionId], references: [id], onDelete: Cascade)
 
   @@unique([callSessionId, sequence])
   @@index([callSessionId, createdAt])
