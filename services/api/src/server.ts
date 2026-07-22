@@ -1,19 +1,50 @@
 import 'dotenv/config';
 
+import type { FastifyInstance } from 'fastify';
+
 import { buildApp } from './app.js';
 import { loadEnvironment } from './config/environment.js';
+import { createDependencyManager } from './infrastructure/dependency-manager.js';
 
 const environment = loadEnvironment();
 
-const app = buildApp({
-  logger: {
-    level: environment.logLevel,
+let appForDependencyLogging:
+  | FastifyInstance
+  | undefined;
+
+const dependencies = createDependencyManager({
+  databaseUrl: environment.databaseUrl,
+  redisUrl: environment.redisUrl,
+  timeoutMs: environment.dependencyTimeoutMs,
+
+  onRedisError(error) {
+    if (appForDependencyLogging) {
+      appForDependencyLogging.log.error(
+        { error },
+        'Redis client error'
+      );
+    } else {
+      console.error('Redis client error:', error);
+    }
   },
 });
 
+const app = buildApp({
+  serverOptions: {
+    logger: {
+      level: environment.logLevel,
+    },
+  },
+  dependencies,
+});
+
+appForDependencyLogging = app;
+
 let shutdownStarted = false;
 
-async function shutdown(signal: NodeJS.Signals): Promise<void> {
+async function shutdown(
+  signal: NodeJS.Signals
+): Promise<void> {
   if (shutdownStarted) {
     return;
   }
@@ -21,20 +52,19 @@ async function shutdown(signal: NodeJS.Signals): Promise<void> {
   shutdownStarted = true;
 
   app.log.info(
-    {
-      signal,
-    },
+    { signal },
     'Graceful shutdown started'
   );
 
   try {
     await app.close();
-    app.log.info('Graceful shutdown completed');
+
+    app.log.info(
+      'Graceful shutdown completed'
+    );
   } catch (error) {
     app.log.error(
-      {
-        error,
-      },
+      { error },
       'Graceful shutdown failed'
     );
 
@@ -61,14 +91,14 @@ try {
       environment: environment.nodeEnv,
       host: environment.host,
       port: environment.port,
+      dependencyTimeoutMs:
+        environment.dependencyTimeoutMs,
     },
     'VoiceNexus API started'
   );
 } catch (error) {
   app.log.fatal(
-    {
-      error,
-    },
+    { error },
     'VoiceNexus API failed to start'
   );
 

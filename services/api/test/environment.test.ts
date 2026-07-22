@@ -3,49 +3,90 @@ import test from 'node:test';
 
 import { loadEnvironment } from '../src/config/environment.js';
 
-test('loadEnvironment returns safe development defaults', () => {
-  const environment = loadEnvironment({});
+const validEnvironment = {
+  NODE_ENV: 'test',
+  API_HOST: '127.0.0.1',
+  API_PORT: '3100',
+  LOG_LEVEL: 'silent',
+  DEPENDENCY_TIMEOUT_MS: '1500',
+  DATABASE_URL:
+    'postgresql://user:password@127.0.0.1:5433/database',
+  REDIS_URL:
+    'redis://:password@127.0.0.1:6380',
+};
 
-  assert.deepEqual(environment, {
-    nodeEnv: 'development',
-    host: '0.0.0.0',
-    port: 3000,
-    logLevel: 'info',
-  });
-});
+test(
+  'loadEnvironment parses valid values',
+  () => {
+    const environment =
+      loadEnvironment(validEnvironment);
 
-test('loadEnvironment parses valid custom values', () => {
-  const environment = loadEnvironment({
-    NODE_ENV: 'test',
-    API_HOST: '127.0.0.1',
-    API_PORT: '3100',
-    LOG_LEVEL: 'silent',
-  });
+    assert.deepEqual(environment, {
+      nodeEnv: 'test',
+      host: '127.0.0.1',
+      port: 3100,
+      logLevel: 'silent',
+      dependencyTimeoutMs: 1500,
+      databaseUrl:
+        validEnvironment.DATABASE_URL,
+      redisUrl:
+        validEnvironment.REDIS_URL,
+    });
+  }
+);
 
-  assert.deepEqual(environment, {
-    nodeEnv: 'test',
-    host: '127.0.0.1',
-    port: 3100,
-    logLevel: 'silent',
-  });
-});
+test(
+  'loadEnvironment rejects a missing database URL',
+  () => {
+    assert.throws(
+      () =>
+        loadEnvironment({
+          ...validEnvironment,
+          DATABASE_URL: '',
+        }),
+      /DATABASE_URL is required/
+    );
+  }
+);
 
-test('loadEnvironment rejects an invalid API port', () => {
-  assert.throws(
-    () =>
-      loadEnvironment({
-        API_PORT: '70000',
-      }),
-    /API_PORT must be an integer between 1 and 65535/
-  );
-});
+test(
+  'loadEnvironment rejects an invalid Redis URL',
+  () => {
+    assert.throws(
+      () =>
+        loadEnvironment({
+          ...validEnvironment,
+          REDIS_URL: 'http://127.0.0.1',
+        }),
+      /REDIS_URL must use one of these protocols/
+    );
+  }
+);
 
-test('loadEnvironment rejects an unsupported log level', () => {
-  assert.throws(
-    () =>
-      loadEnvironment({
-        LOG_LEVEL: 'everything',
-      }),
-    /LOG_LEVEL must be one of/
-  );
-});
+test(
+  'loadEnvironment rejects an invalid API port',
+  () => {
+    assert.throws(
+      () =>
+        loadEnvironment({
+          ...validEnvironment,
+          API_PORT: '70000',
+        }),
+      /API_PORT must be an integer between 1 and 65535/
+    );
+  }
+);
+
+test(
+  'loadEnvironment rejects an unsupported log level',
+  () => {
+    assert.throws(
+      () =>
+        loadEnvironment({
+          ...validEnvironment,
+          LOG_LEVEL: 'everything',
+        }),
+      /LOG_LEVEL must be one of/
+    );
+  }
+);

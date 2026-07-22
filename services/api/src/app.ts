@@ -3,7 +3,13 @@ import fastify, {
   type FastifyServerOptions,
 } from 'fastify';
 
+import type { DependencyManager } from './infrastructure/dependency-manager.js';
 import { healthRoutes } from './routes/health.js';
+
+export interface BuildAppOptions {
+  serverOptions?: FastifyServerOptions;
+  dependencies: DependencyManager;
+}
 
 function getErrorStatusCode(error: unknown): number {
   if (
@@ -22,7 +28,10 @@ function getErrorStatusCode(error: unknown): number {
 }
 
 function getErrorName(error: unknown): string {
-  if (error instanceof Error && error.name.trim() !== '') {
+  if (
+    error instanceof Error &&
+    error.name.trim() !== ''
+  ) {
     return error.name;
   }
 
@@ -30,7 +39,10 @@ function getErrorName(error: unknown): string {
 }
 
 function getErrorMessage(error: unknown): string {
-  if (error instanceof Error && error.message.trim() !== '') {
+  if (
+    error instanceof Error &&
+    error.message.trim() !== ''
+  ) {
     return error.message;
   }
 
@@ -38,46 +50,62 @@ function getErrorMessage(error: unknown): string {
 }
 
 export function buildApp(
-  options: FastifyServerOptions = {}
+  options: BuildAppOptions
 ): FastifyInstance {
-  const app = fastify(options);
+  const app = fastify(
+    options.serverOptions ?? {}
+  );
 
   app.register(healthRoutes, {
     prefix: '/api/v1',
+    dependencies: options.dependencies,
   });
 
-  app.setNotFoundHandler(async (request, reply) => {
-    return reply.status(404).send({
-      statusCode: 404,
-      error: 'Not Found',
-      message: `Route ${request.method} ${request.url} was not found.`,
-    });
+  app.addHook('onClose', async () => {
+    await options.dependencies.close();
   });
 
-  app.setErrorHandler(async (error, request, reply) => {
-    request.log.error(
-      {
-        error,
-        method: request.method,
-        url: request.url,
-      },
-      'Request failed'
-    );
+  app.setNotFoundHandler(
+    async (request, reply) => {
+      return reply.status(404).send({
+        statusCode: 404,
+        error: 'Not Found',
+        message:
+          `Route ${request.method} ` +
+          `${request.url} was not found.`,
+      });
+    }
+  );
 
-    const statusCode = getErrorStatusCode(error);
+  app.setErrorHandler(
+    async (error, request, reply) => {
+      request.log.error(
+        {
+          error,
+          method: request.method,
+          url: request.url,
+        },
+        'Request failed'
+      );
 
-    return reply.status(statusCode).send({
-      statusCode,
-      error:
-        statusCode >= 500
-          ? 'Internal Server Error'
-          : getErrorName(error),
-      message:
-        statusCode >= 500
-          ? 'An unexpected server error occurred.'
-          : getErrorMessage(error),
-    });
-  });
+      const statusCode =
+        getErrorStatusCode(error);
+
+      return reply.status(statusCode).send({
+        statusCode,
+
+        error:
+          statusCode >= 500
+            ? 'Internal Server Error'
+            : getErrorName(error),
+
+        message:
+          statusCode >= 500
+            ? 'An unexpected server error occurred.'
+            : getErrorMessage(error),
+      });
+    }
+  );
 
   return app;
 }
