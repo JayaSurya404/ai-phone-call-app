@@ -1,16 +1,10 @@
 import 'dotenv/config';
 
-import type { FastifyInstance } from 'fastify';
-
 import { buildApp } from './app.js';
 import { loadEnvironment } from './config/environment.js';
 import { createDependencyManager } from './infrastructure/dependency-manager.js';
 
 const environment = loadEnvironment();
-
-let appForDependencyLogging:
-  | FastifyInstance
-  | undefined;
 
 const dependencies = createDependencyManager({
   databaseUrl: environment.databaseUrl,
@@ -18,14 +12,7 @@ const dependencies = createDependencyManager({
   timeoutMs: environment.dependencyTimeoutMs,
 
   onRedisError(error) {
-    if (appForDependencyLogging) {
-      appForDependencyLogging.log.error(
-        { error },
-        'Redis client error'
-      );
-    } else {
-      console.error('Redis client error:', error);
-    }
+    console.error('Redis client error:', error);
   },
 });
 
@@ -37,8 +24,6 @@ const app = buildApp({
   },
   dependencies,
 });
-
-appForDependencyLogging = app;
 
 let shutdownStarted = false;
 
@@ -52,7 +37,9 @@ async function shutdown(
   shutdownStarted = true;
 
   app.log.info(
-    { signal },
+    {
+      signal,
+    },
     'Graceful shutdown started'
   );
 
@@ -64,7 +51,9 @@ async function shutdown(
     );
   } catch (error) {
     app.log.error(
-      { error },
+      {
+        error,
+      },
       'Graceful shutdown failed'
     );
 
@@ -98,9 +87,22 @@ try {
   );
 } catch (error) {
   app.log.fatal(
-    { error },
+    {
+      error,
+    },
     'VoiceNexus API failed to start'
   );
+
+  try {
+    await app.close();
+  } catch (closeError) {
+    app.log.error(
+      {
+        error: closeError,
+      },
+      'API cleanup failed'
+    );
+  }
 
   process.exitCode = 1;
 }
