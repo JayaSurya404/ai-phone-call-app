@@ -17,14 +17,15 @@
   "scripts": {
     "workspaces:list": "npm query .workspace",
     "environment:check": "node --version && npm --version",
-    "test": "echo \"No test suites have been configured yet.\""
+    "infra:config": "docker compose --env-file infra/docker/.env -f infra/docker/compose.dev.yml config",
+    "infra:pull": "docker compose --env-file infra/docker/.env -f infra/docker/compose.dev.yml pull",
+    "infra:up": "docker compose --env-file infra/docker/.env -f infra/docker/compose.dev.yml up -d --wait",
+    "infra:down": "docker compose --env-file infra/docker/.env -f infra/docker/compose.dev.yml down",
+    "infra:ps": "docker compose --env-file infra/docker/.env -f infra/docker/compose.dev.yml ps",
+    "infra:logs": "docker compose --env-file infra/docker/.env -f infra/docker/compose.dev.yml logs -f",
+    "test": "echo \"No root test suite has been configured yet.\""
   },
   "allowScripts": {
-    "unrs-resolver@1.12.2": true
-  },
-  "dependencies": {
-    "expo": "~57.0.7",
-    "react": "19.2.3",
-    "react-native": "0.86.0"
+    "unrs-resolver": "1.12.2"
   }
 }
