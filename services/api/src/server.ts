@@ -6,6 +6,10 @@ import { createDependencyManager } from './infrastructure/dependency-manager.js'
 
 import { createPrismaClient } from './infrastructure/prisma.js';
 
+import {
+  createPromptTemplateService,
+} from './modules/prompt-templates/prompt-template-service.js';
+
 const environment = loadEnvironment();
 
 const prisma = createPrismaClient({
@@ -13,6 +17,9 @@ const prisma = createPrismaClient({
   timeoutMs:
     environment.dependencyTimeoutMs,
 });
+
+const promptTemplates =
+  createPromptTemplateService(prisma);
 
 const dependencies = createDependencyManager({
   prisma,
@@ -31,6 +38,7 @@ const app = buildApp({
     },
   },
   dependencies,
+   promptTemplates,
 });
 
 let shutdownStarted = false;

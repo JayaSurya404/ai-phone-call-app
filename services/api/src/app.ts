@@ -6,9 +6,19 @@ import fastify, {
 import type { DependencyManager } from './infrastructure/dependency-manager.js';
 import { healthRoutes } from './routes/health.js';
 
+import type {
+  PromptTemplateService,
+} from './modules/prompt-templates/prompt-template-service.js';
+
+import {
+  promptTemplateRoutes,
+} from './routes/prompt-templates.js';
+
 export interface BuildAppOptions {
   serverOptions?: FastifyServerOptions;
   dependencies: DependencyManager;
+   promptTemplates?:
+    PromptTemplateService;
 }
 
 function getErrorStatusCode(error: unknown): number {
@@ -60,6 +70,19 @@ export function buildApp(
     prefix: '/api/v1',
     dependencies: options.dependencies,
   });
+
+  if (options.promptTemplates) {
+  app.register(
+    promptTemplateRoutes,
+    {
+      prefix:
+        '/api/v1/prompt-templates',
+
+      promptTemplates:
+        options.promptTemplates,
+    }
+  );
+}
 
   app.addHook('onClose', async () => {
     await options.dependencies.close();
