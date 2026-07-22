@@ -5,6 +5,38 @@ import fastify, {
 
 import { healthRoutes } from './routes/health.js';
 
+function getErrorStatusCode(error: unknown): number {
+  if (
+    typeof error === 'object' &&
+    error !== null &&
+    'statusCode' in error &&
+    typeof error.statusCode === 'number' &&
+    Number.isInteger(error.statusCode) &&
+    error.statusCode >= 400 &&
+    error.statusCode <= 599
+  ) {
+    return error.statusCode;
+  }
+
+  return 500;
+}
+
+function getErrorName(error: unknown): string {
+  if (error instanceof Error && error.name.trim() !== '') {
+    return error.name;
+  }
+
+  return 'Error';
+}
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message.trim() !== '') {
+    return error.message;
+  }
+
+  return 'The request could not be completed.';
+}
+
 export function buildApp(
   options: FastifyServerOptions = {}
 ): FastifyInstance {
@@ -32,21 +64,18 @@ export function buildApp(
       'Request failed'
     );
 
-    const statusCode =
-      typeof error.statusCode === 'number' && error.statusCode >= 400
-        ? error.statusCode
-        : 500;
+    const statusCode = getErrorStatusCode(error);
 
     return reply.status(statusCode).send({
       statusCode,
       error:
         statusCode >= 500
           ? 'Internal Server Error'
-          : error.name,
+          : getErrorName(error),
       message:
         statusCode >= 500
           ? 'An unexpected server error occurred.'
-          : error.message,
+          : getErrorMessage(error),
     });
   });
 
