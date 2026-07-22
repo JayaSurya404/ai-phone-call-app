@@ -33,6 +33,8 @@
     "test": "npm run api:test"
   },
   "allowScripts": {
-    "unrs-resolver": "1.12.2"
+    "unrs-resolver": "1.12.2",
+    "esbuild@0.28.1": true,
+    "unrs-resolver@1.12.2": true
   }
 }
