@@ -147,3 +147,5 @@ compose.override.yml
 tmp/
 temp/
 .cache/
+# Generated Prisma Client
+services/api/src/generated/

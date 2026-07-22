@@ -4,10 +4,18 @@ import { buildApp } from './app.js';
 import { loadEnvironment } from './config/environment.js';
 import { createDependencyManager } from './infrastructure/dependency-manager.js';
 
+import { createPrismaClient } from './infrastructure/prisma.js';
+
 const environment = loadEnvironment();
 
-const dependencies = createDependencyManager({
+const prisma = createPrismaClient({
   databaseUrl: environment.databaseUrl,
+  timeoutMs:
+    environment.dependencyTimeoutMs,
+});
+
+const dependencies = createDependencyManager({
+  prisma,
   redisUrl: environment.redisUrl,
   timeoutMs: environment.dependencyTimeoutMs,
 

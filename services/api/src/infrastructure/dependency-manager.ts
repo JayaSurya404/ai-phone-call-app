@@ -1,5 +1,8 @@
-import { Pool } from 'pg';
 import { createClient } from 'redis';
+
+import type {
+  VoiceNexusPrismaClient,
+} from './prisma.js';
 
 export interface DependencyManager {
   checkPostgresql(): Promise<void>;
@@ -8,7 +11,7 @@ export interface DependencyManager {
 }
 
 export interface DependencyManagerOptions {
-  databaseUrl: string;
+  prisma: VoiceNexusPrismaClient;
   redisUrl: string;
   timeoutMs: number;
   onRedisError?: (error: Error) => void;
@@ -17,16 +20,9 @@ export interface DependencyManagerOptions {
 export function createDependencyManager(
   options: DependencyManagerOptions
 ): DependencyManager {
-  const postgresPool = new Pool({
-    connectionString: options.databaseUrl,
-    max: 5,
-    connectionTimeoutMillis: options.timeoutMs,
-    idleTimeoutMillis: 30_000,
-    allowExitOnIdle: true,
-  });
-
   const redisClient = createClient({
     url: options.redisUrl,
+
     socket: {
       connectTimeout: options.timeoutMs,
       reconnectStrategy: false,
@@ -41,7 +37,8 @@ export function createDependencyManager(
     | Promise<void>
     | undefined;
 
-  async function ensureRedisConnection(): Promise<void> {
+  async function ensureRedisConnection():
+  Promise<void> {
     if (redisClient.isReady) {
       return;
     }
@@ -67,19 +64,16 @@ export function createDependencyManager(
 
   return {
     async checkPostgresql(): Promise<void> {
-      const connection = await postgresPool.connect();
-
-      try {
-        await connection.query('SELECT 1');
-      } finally {
-        connection.release();
-      }
+      await options.prisma.$queryRaw`
+        SELECT 1
+      `;
     },
 
     async checkRedis(): Promise<void> {
       await ensureRedisConnection();
 
-      const response = await redisClient.ping();
+      const response =
+        await redisClient.ping();
 
       if (response !== 'PONG') {
         throw new Error(
@@ -89,7 +83,7 @@ export function createDependencyManager(
     },
 
     async close(): Promise<void> {
-      await postgresPool.end();
+      await options.prisma.$disconnect();
 
       if (redisClient.isOpen) {
         try {

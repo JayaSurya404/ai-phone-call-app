@@ -1,0 +1,104 @@
+generator client {
+  provider            = "prisma-client"
+  output              = "../src/generated/prisma"
+  runtime             = "nodejs"
+  moduleFormat        = "esm"
+  generatedFileExtension = "ts"
+  importFileExtension = "ts"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum CallStatus {
+  DRAFT
+  QUEUED
+  STARTING
+  RINGING
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum TranscriptSpeaker {
+  AI_AGENT
+  REMOTE_PARTY
+  SYSTEM
+}
+
+enum SentimentLabel {
+  POSITIVE
+  NEUTRAL
+  NEGATIVE
+  MIXED
+  UNKNOWN
+}
+
+model PromptTemplate {
+  id          String        @id @default(uuid()) @db.Uuid
+  name        String        @unique @db.VarChar(120)
+  description String?       @db.VarChar(500)
+  promptText  String        @db.Text
+  isDefault   Boolean       @default(false)
+  createdAt   DateTime      @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime      @updatedAt @db.Timestamptz(3)
+  calls       CallSession[]
+
+  @@map("prompt_templates")
+}
+
+model CallSession {
+  id                String              @id @default(uuid()) @db.Uuid
+  destinationNumber String              @db.VarChar(32)
+  promptSnapshot    String              @db.Text
+  promptTemplateId  String?             @db.Uuid
+  status            CallStatus          @default(DRAFT)
+  languageCode      String              @default("en-IN") @db.VarChar(16)
+  provider          String?             @db.VarChar(64)
+  providerCallId    String?             @unique @db.VarChar(191)
+  startedAt         DateTime?           @db.Timestamptz(3)
+  endedAt           DateTime?           @db.Timestamptz(3)
+  summary           String?             @db.Text
+  sentiment         SentimentLabel      @default(UNKNOWN)
+  failureReason     String?             @db.Text
+  createdAt         DateTime            @default(now()) @db.Timestamptz(3)
+  updatedAt         DateTime            @updatedAt @db.Timestamptz(3)
+
+  promptTemplate    PromptTemplate?     @relation(
+    fields: [promptTemplateId],
+    references: [id],
+    onDelete: SetNull
+  )
+
+  transcriptSegments TranscriptSegment[]
+
+  @@index([status, createdAt])
+  @@index([destinationNumber, createdAt])
+  @@map("call_sessions")
+}
+
+model TranscriptSegment {
+  id            String             @id @default(uuid()) @db.Uuid
+  callSessionId String             @db.Uuid
+  sequence      Int
+  speaker       TranscriptSpeaker
+  content       String             @db.Text
+  confidence    Float?
+  sentiment     SentimentLabel     @default(UNKNOWN)
+  latencyMs     Int?
+  startedAtMs   Int?
+  endedAtMs     Int?
+  createdAt     DateTime           @default(now()) @db.Timestamptz(3)
+
+  callSession   CallSession        @relation(
+    fields: [callSessionId],
+    references: [id],
+    onDelete: Cascade
+  )
+
+  @@unique([callSessionId, sequence])
+  @@index([callSessionId, createdAt])
+  @@map("transcript_segments")
+}
