@@ -16,6 +16,14 @@ import type {
 } from './infrastructure/telephony-event-repository.js';
 
 import type {
+  AiProviderRegistry,
+} from './modules/ai/contracts.js';
+
+import type {
+  AiTurnService,
+} from './modules/ai/ai-turn-service.js';
+
+import type {
   CallOrchestrationService,
 } from './modules/calls/call-orchestration-service.js';
 
@@ -26,6 +34,10 @@ import type {
 import type {
   PromptTemplateService,
 } from './modules/prompt-templates/prompt-template-service.js';
+
+import {
+  aiRoutes,
+} from './routes/ai.js';
 
 import {
   callObservabilityRoutes,
@@ -62,14 +74,21 @@ export interface BuildAppOptions {
     DependencyManager;
   promptTemplates?:
     PromptTemplateService;
-  calls?: CallSessionService;
+  calls?:
+    CallSessionService;
   orchestration?:
     CallOrchestrationService;
   internalApiToken?: string;
-  activeCalls?: ActiveCallStore;
+  activeCalls?:
+    ActiveCallStore;
   telephonyEvents?:
     TelephonyEventRepository;
-  closeables?: readonly Closeable[];
+  aiProviders?:
+    AiProviderRegistry;
+  aiTurns?:
+    AiTurnService;
+  closeables?:
+    readonly Closeable[];
 }
 
 function getErrorStatusCode(
@@ -116,7 +135,10 @@ function getErrorMessage(
     return error.message;
   }
 
-  return 'The request could not be completed.';
+  return (
+    'The request could not ' +
+    'be completed.'
+  );
 }
 
 export function buildApp(
@@ -176,7 +198,8 @@ export function buildApp(
       {
         prefix:
           '/api/v1/calls',
-        calls: options.calls,
+        calls:
+          options.calls,
         activeCalls:
           options.activeCalls,
         events:
@@ -200,6 +223,19 @@ export function buildApp(
           options.orchestration,
       }
     );
+  }
+
+  if (
+    options.aiProviders &&
+    options.aiTurns
+  ) {
+    app.register(aiRoutes, {
+      prefix: '/api/v1/ai',
+      providers:
+        options.aiProviders,
+      aiTurns:
+        options.aiTurns,
+    });
   }
 
   app.addHook(
@@ -238,27 +274,37 @@ export function buildApp(
       request.log.error(
         {
           error,
-          method: request.method,
-          url: request.url,
+          method:
+            request.method,
+          url:
+            request.url,
         },
         'Request failed'
       );
 
       const statusCode =
-        getErrorStatusCode(error);
+        getErrorStatusCode(
+          error
+        );
 
       return reply
         .status(statusCode)
         .send({
           statusCode,
+
           error:
             statusCode >= 500
               ? 'Internal Server Error'
-              : getErrorName(error),
+              : getErrorName(
+                  error
+                ),
+
           message:
             statusCode >= 500
               ? 'An unexpected server error occurred.'
-              : getErrorMessage(error),
+              : getErrorMessage(
+                  error
+                ),
         });
     }
   );

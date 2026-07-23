@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+
 import test from 'node:test';
 
 import {
@@ -12,22 +13,51 @@ NodeJS.ProcessEnv {
     API_HOST: '127.0.0.1',
     API_PORT: '3000',
     LOG_LEVEL: 'silent',
+
     DATABASE_URL:
       'postgresql://user:password@127.0.0.1:5433/database',
+
     REDIS_URL:
       'redis://:password@127.0.0.1:6380',
+
     DEPENDENCY_TIMEOUT_MS:
       '2000',
+
     INTERNAL_API_TOKEN:
       'test-api-token',
+
     TELEPHONY_SIMULATOR_URL:
       'http://127.0.0.1:3100',
+
     TELEPHONY_SIMULATOR_TOKEN:
       'test-simulator-token',
+
     TELEPHONY_TIMEOUT_MS:
       '3000',
+
     ACTIVE_CALL_TTL_SECONDS:
       '86400',
+
+    AI_PROVIDER_MODE:
+      'simulated',
+
+    INFERENCE_BASE_URL:
+      'http://127.0.0.1:3200',
+
+    INFERENCE_INTERNAL_TOKEN:
+      'test-inference-token',
+
+    INFERENCE_TIMEOUT_MS:
+      '15000',
+
+    STT_PROVIDER_NAME:
+      'faster-whisper',
+
+    LLM_PROVIDER_NAME:
+      'qwen',
+
+    TTS_PROVIDER_NAME:
+      'kokoro',
   };
 }
 
@@ -57,6 +87,12 @@ test(
 
     assert.equal(
       environment
+        .aiProviderMode,
+      'simulated'
+    );
+
+    assert.equal(
+      environment
         .telephonySimulatorUrl,
       'http://127.0.0.1:3100'
     );
@@ -73,7 +109,9 @@ test(
 
     assert.throws(
       () => {
-        loadEnvironment(source);
+        loadEnvironment(
+          source
+        );
       },
       /DATABASE_URL is required/
     );
@@ -91,7 +129,9 @@ test(
 
     assert.throws(
       () => {
-        loadEnvironment(source);
+        loadEnvironment(
+          source
+        );
       },
       /REDIS_URL must be a valid URL/
     );
@@ -104,11 +144,14 @@ test(
     const source =
       validEnvironment();
 
-    source.API_PORT = 'zero';
+    source.API_PORT =
+      'zero';
 
     assert.throws(
       () => {
-        loadEnvironment(source);
+        loadEnvironment(
+          source
+        );
       },
       /API_PORT must be a positive integer/
     );
@@ -126,9 +169,31 @@ test(
 
     assert.throws(
       () => {
-        loadEnvironment(source);
+        loadEnvironment(
+          source
+        );
       },
       /LOG_LEVEL is unsupported/
+    );
+  }
+);
+
+test(
+  'loadEnvironment rejects an invalid AI provider mode',
+  () => {
+    const source =
+      validEnvironment();
+
+    source.AI_PROVIDER_MODE =
+      'unknown';
+
+    assert.throws(
+      () => {
+        loadEnvironment(
+          source
+        );
+      },
+      /AI_PROVIDER_MODE must be simulated or http/
     );
   }
 );

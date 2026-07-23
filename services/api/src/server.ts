@@ -29,6 +29,14 @@ import {
 } from './infrastructure/telephony-simulator-client.js';
 
 import {
+  createAiProviderRegistry,
+} from './modules/ai/provider-registry.js';
+
+import {
+  createAiTurnService,
+} from './modules/ai/ai-turn-service.js';
+
+import {
   createCallOrchestrationService,
 } from './modules/calls/call-orchestration-service.js';
 
@@ -51,6 +59,7 @@ const prisma =
   createPrismaClient({
     databaseUrl:
       environment.databaseUrl,
+
     timeoutMs:
       environment
         .dependencyTimeoutMs,
@@ -59,11 +68,14 @@ const prisma =
 const dependencies =
   createDependencyManager({
     prisma,
+
     redisUrl:
       environment.redisUrl,
+
     timeoutMs:
       environment
         .dependencyTimeoutMs,
+
     onRedisError(error) {
       console.error(
         'Redis client error:',
@@ -76,12 +88,15 @@ const activeCalls =
   createActiveCallStore({
     redisUrl:
       environment.redisUrl,
+
     timeoutMs:
       environment
         .dependencyTimeoutMs,
+
     ttlSeconds:
       environment
         .activeCallTtlSeconds,
+
     onError(error) {
       console.error(
         'Active-call Redis error:',
@@ -110,9 +125,11 @@ const telephony =
     baseUrl:
       environment
         .telephonySimulatorUrl,
+
     internalToken:
       environment
         .telephonySimulatorToken,
+
     timeoutMs:
       environment
         .telephonyTimeoutMs,
@@ -124,6 +141,43 @@ const orchestration =
     telephony,
     telephonyEvents,
     activeCalls
+  );
+
+const aiProviders =
+  createAiProviderRegistry({
+    mode:
+      environment
+        .aiProviderMode,
+
+    inferenceBaseUrl:
+      environment
+        .inferenceBaseUrl,
+
+    inferenceInternalToken:
+      environment
+        .inferenceInternalToken,
+
+    inferenceTimeoutMs:
+      environment
+        .inferenceTimeoutMs,
+
+    speechToTextName:
+      environment
+        .speechToTextProviderName,
+
+    languageModelName:
+      environment
+        .languageModelProviderName,
+
+    textToSpeechName:
+      environment
+        .textToSpeechProviderName,
+  });
+
+const aiTurns =
+  createAiTurnService(
+    calls,
+    aiProviders
   );
 
 const recovery =
@@ -142,20 +196,29 @@ const app = buildApp({
         environment.logLevel,
     },
   },
+
   dependencies,
   promptTemplates,
   calls,
   orchestration,
+
   internalApiToken:
-    environment.internalApiToken,
+    environment
+      .internalApiToken,
+
   activeCalls,
   telephonyEvents,
+  aiProviders,
+  aiTurns,
+
   closeables: [
+    aiProviders,
     activeCalls,
   ],
 });
 
-let shutdownStarted = false;
+let shutdownStarted =
+  false;
 
 async function shutdown(
   signal: NodeJS.Signals
@@ -191,32 +254,52 @@ async function shutdown(
   }
 }
 
-process.once('SIGINT', () => {
-  void shutdown('SIGINT');
-});
+process.once(
+  'SIGINT',
+  () => {
+    void shutdown('SIGINT');
+  }
+);
 
-process.once('SIGTERM', () => {
-  void shutdown('SIGTERM');
-});
+process.once(
+  'SIGTERM',
+  () => {
+    void shutdown('SIGTERM');
+  }
+);
 
 try {
   await app.listen({
-    host: environment.host,
-    port: environment.port,
+    host:
+      environment.host,
+
+    port:
+      environment.port,
   });
 
   app.log.info(
     {
       environment:
         environment.nodeEnv,
-      host: environment.host,
-      port: environment.port,
+
+      host:
+        environment.host,
+
+      port:
+        environment.port,
+
       dependencyTimeoutMs:
         environment
           .dependencyTimeoutMs,
+
       telephonySimulatorUrl:
         environment
           .telephonySimulatorUrl,
+
+      aiProviderMode:
+        environment
+          .aiProviderMode,
+
       restoredCalls,
     },
     'VoiceNexus API started'

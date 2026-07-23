@@ -27,6 +27,15 @@ export interface Environment {
   telephonySimulatorToken: string;
   telephonyTimeoutMs: number;
   activeCallTtlSeconds: number;
+  aiProviderMode:
+    | 'simulated'
+    | 'http';
+  inferenceBaseUrl: string;
+  inferenceInternalToken: string;
+  inferenceTimeoutMs: number;
+  speechToTextProviderName: string;
+  languageModelProviderName: string;
+  textToSpeechProviderName: string;
 }
 
 function requiredString(
@@ -75,7 +84,8 @@ function validatedUrl(
   fallback:
     | string
     | undefined,
-  protocols: readonly string[]
+  protocols:
+    readonly string[]
 ): string {
   const raw = requiredString(
     source,
@@ -141,17 +151,39 @@ export function loadEnvironment(
     );
   }
 
+  const aiProviderMode =
+    source.AI_PROVIDER_MODE
+      ?.trim() ||
+    'simulated';
+
+  if (
+    aiProviderMode !==
+      'simulated' &&
+    aiProviderMode !==
+      'http'
+  ) {
+    throw new Error(
+      'AI_PROVIDER_MODE must be simulated or http.'
+    );
+  }
+
   return {
     nodeEnv,
+
     host:
       source.API_HOST?.trim() ||
       '0.0.0.0',
-    port: positiveInteger(
-      source,
-      'API_PORT',
-      3000
-    ),
-    logLevel: logLevel as LogLevel,
+
+    port:
+      positiveInteger(
+        source,
+        'API_PORT',
+        3000
+      ),
+
+    logLevel:
+      logLevel as LogLevel,
+
     databaseUrl:
       validatedUrl(
         source,
@@ -162,6 +194,7 @@ export function loadEnvironment(
           'postgres:',
         ]
       ),
+
     redisUrl:
       validatedUrl(
         source,
@@ -172,18 +205,21 @@ export function loadEnvironment(
           'rediss:',
         ]
       ),
+
     dependencyTimeoutMs:
       positiveInteger(
         source,
         'DEPENDENCY_TIMEOUT_MS',
         2000
       ),
+
     internalApiToken:
       requiredString(
         source,
         'INTERNAL_API_TOKEN',
         'voicenexus_local_api_internal_token_2026'
       ),
+
     telephonySimulatorUrl:
       validatedUrl(
         source,
@@ -194,23 +230,74 @@ export function loadEnvironment(
           'https:',
         ]
       ),
+
     telephonySimulatorToken:
       requiredString(
         source,
         'TELEPHONY_SIMULATOR_TOKEN',
         'voicenexus_local_simulator_token_2026'
       ),
+
     telephonyTimeoutMs:
       positiveInteger(
         source,
         'TELEPHONY_TIMEOUT_MS',
         3000
       ),
+
     activeCallTtlSeconds:
       positiveInteger(
         source,
         'ACTIVE_CALL_TTL_SECONDS',
         86400
+      ),
+
+    aiProviderMode,
+
+    inferenceBaseUrl:
+      validatedUrl(
+        source,
+        'INFERENCE_BASE_URL',
+        'http://127.0.0.1:3200',
+        [
+          'http:',
+          'https:',
+        ]
+      ),
+
+    inferenceInternalToken:
+      requiredString(
+        source,
+        'INFERENCE_INTERNAL_TOKEN',
+        'voicenexus_local_inference_token_2026'
+      ),
+
+    inferenceTimeoutMs:
+      positiveInteger(
+        source,
+        'INFERENCE_TIMEOUT_MS',
+        15000
+      ),
+
+    speechToTextProviderName:
+      requiredString(
+        source,
+        'STT_PROVIDER_NAME',
+        'faster-whisper'
+      ),
+
+    languageModelProviderName:
+      requiredString(
+        source,
+        'LLM_PROVIDER_NAME',
+        'qwen'
+      ),
+
+    textToSpeechProviderName:
+      requiredString(
+        source,
+        'TTS_PROVIDER_NAME',
+        'kokoro'
       ),
   };
 }
