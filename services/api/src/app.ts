@@ -4,8 +4,16 @@ import fastify, {
 } from 'fastify';
 
 import type {
+  ActiveCallStore,
+} from './infrastructure/active-call-store.js';
+
+import type {
   DependencyManager,
 } from './infrastructure/dependency-manager.js';
+
+import type {
+  TelephonyEventRepository,
+} from './infrastructure/telephony-event-repository.js';
 
 import type {
   CallOrchestrationService,
@@ -18,6 +26,10 @@ import type {
 import type {
   PromptTemplateService,
 } from './modules/prompt-templates/prompt-template-service.js';
+
+import {
+  callObservabilityRoutes,
+} from './routes/call-observability.js';
 
 import {
   callOperationRoutes,
@@ -39,6 +51,10 @@ import {
   promptTemplateRoutes,
 } from './routes/prompt-templates.js';
 
+interface Closeable {
+  close(): Promise<void>;
+}
+
 export interface BuildAppOptions {
   serverOptions?:
     FastifyServerOptions;
@@ -50,6 +66,10 @@ export interface BuildAppOptions {
   orchestration?:
     CallOrchestrationService;
   internalApiToken?: string;
+  activeCalls?: ActiveCallStore;
+  telephonyEvents?:
+    TelephonyEventRepository;
+  closeables?: readonly Closeable[];
 }
 
 function getErrorStatusCode(
@@ -147,6 +167,25 @@ export function buildApp(
   }
 
   if (
+    options.calls &&
+    options.activeCalls &&
+    options.telephonyEvents
+  ) {
+    app.register(
+      callObservabilityRoutes,
+      {
+        prefix:
+          '/api/v1/calls',
+        calls: options.calls,
+        activeCalls:
+          options.activeCalls,
+        events:
+          options.telephonyEvents,
+      }
+    );
+  }
+
+  if (
     options.orchestration &&
     options.internalApiToken
   ) {
@@ -166,6 +205,13 @@ export function buildApp(
   app.addHook(
     'onClose',
     async () => {
+      for (
+        const closeable of
+        options.closeables ?? []
+      ) {
+        await closeable.close();
+      }
+
       await options.dependencies
         .close();
     }

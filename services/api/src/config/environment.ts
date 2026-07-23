@@ -26,6 +26,7 @@ export interface Environment {
   telephonySimulatorUrl: string;
   telephonySimulatorToken: string;
   telephonyTimeoutMs: number;
+  activeCallTtlSeconds: number;
 }
 
 function requiredString(
@@ -204,6 +205,12 @@ export function loadEnvironment(
         source,
         'TELEPHONY_TIMEOUT_MS',
         3000
+      ),
+    activeCallTtlSeconds:
+      positiveInteger(
+        source,
+        'ACTIVE_CALL_TTL_SECONDS',
+        86400
       ),
   };
 }

@@ -8,11 +8,14 @@ import {
   TranscriptSpeaker,
 } from '../generated/prisma/client.ts';
 
+import type {
+  CallOrchestrationService,
+} from '../modules/calls/call-orchestration-service.js';
+
 import {
   providerEventTypes,
-  type CallOrchestrationService,
   type TelephonyProviderEventInput,
-} from '../modules/calls/call-orchestration-service.js';
+} from '../modules/calls/provider-event-contracts.js';
 
 interface InternalTelephonyRouteOptions {
   internalToken: string;
@@ -77,10 +80,12 @@ FastifyPluginAsync<
             eventId: {
               type: 'string',
               minLength: 1,
+              maxLength: 191,
             },
             sessionId: {
               type: 'string',
               minLength: 1,
+              maxLength: 191,
             },
             callSessionId: {
               type: 'string',
@@ -88,7 +93,7 @@ FastifyPluginAsync<
             },
             occurredAt: {
               type: 'string',
-              minLength: 1,
+              format: 'date-time',
             },
             type: {
               type: 'string',
@@ -168,7 +173,7 @@ FastifyPluginAsync<
       },
     },
     async (request) => {
-      const call =
+      const result =
         await options.orchestration
           .handleProviderEvent(
             request.body
@@ -176,7 +181,9 @@ FastifyPluginAsync<
 
       return {
         accepted: true,
-        call,
+        duplicate:
+          result.duplicate,
+        call: result.call,
       };
     }
   );

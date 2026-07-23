@@ -23,6 +23,7 @@ export interface SimulatorEnvironment {
   apiBaseUrl: string;
   apiInternalToken: string;
   callbackTimeoutMs: number;
+  callbackMaxAttempts: number;
   scenarioSpeedMultiplier: number;
 }
 
@@ -189,6 +190,12 @@ export function loadSimulatorEnvironment(
         source,
         'CALLBACK_TIMEOUT_MS',
         3000
+      ),
+    callbackMaxAttempts:
+      readPositiveInteger(
+        source,
+        'CALLBACK_MAX_ATTEMPTS',
+        3
       ),
     scenarioSpeedMultiplier:
       readPositiveNumber(

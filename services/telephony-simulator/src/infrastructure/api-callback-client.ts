@@ -12,6 +12,7 @@ export interface ApiCallbackClientOptions {
   apiBaseUrl: string;
   internalToken: string;
   timeoutMs: number;
+  maxAttempts: number;
 }
 
 export class ApiCallbackError
@@ -25,52 +26,112 @@ export class ApiCallbackError
   }
 }
 
+function wait(
+  milliseconds: number
+): Promise<void> {
+  return new Promise(
+    (resolve) => {
+      setTimeout(
+        resolve,
+        milliseconds
+      );
+    }
+  );
+}
+
 export function createApiCallbackClient(
   options: ApiCallbackClientOptions
 ): ApiCallbackClient {
+  async function sendOnce(
+    event: TelephonyProviderEvent
+  ): Promise<void> {
+    const controller =
+      new AbortController();
+
+    const timeout = setTimeout(
+      () => {
+        controller.abort();
+      },
+      options.timeoutMs
+    );
+
+    try {
+      const response = await fetch(
+        `${options.apiBaseUrl}/api/v1/internal/telephony/events`,
+        {
+          method: 'POST',
+          headers: {
+            authorization:
+              `Bearer ${options.internalToken}`,
+            'content-type':
+              'application/json',
+          },
+          body:
+            JSON.stringify(event),
+          signal: controller.signal,
+        }
+      );
+
+      if (!response.ok) {
+        const body =
+          await response.text();
+
+        throw new ApiCallbackError(
+          response.status,
+          body ||
+            'The API rejected the simulator callback.'
+        );
+      }
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
   return {
     async send(
       event: TelephonyProviderEvent
     ): Promise<void> {
-      const controller =
-        new AbortController();
+      let lastError: unknown;
 
-      const timeout = setTimeout(
-        () => {
-          controller.abort();
-        },
-        options.timeoutMs
-      );
+      for (
+        let attempt = 1;
+        attempt <=
+          options.maxAttempts;
+        attempt += 1
+      ) {
+        try {
+          await sendOnce(event);
+          return;
+        } catch (error) {
+          lastError = error;
 
-      try {
-        const response = await fetch(
-          `${options.apiBaseUrl}/api/v1/internal/telephony/events`,
-          {
-            method: 'POST',
-            headers: {
-              authorization:
-                `Bearer ${options.internalToken}`,
-              'content-type':
-                'application/json',
-            },
-            body: JSON.stringify(event),
-            signal: controller.signal,
+          if (
+            error instanceof
+              ApiCallbackError &&
+            error.statusCode >= 400 &&
+            error.statusCode < 500
+          ) {
+            throw error;
           }
-        );
 
-        if (!response.ok) {
-          const body =
-            await response.text();
-
-          throw new ApiCallbackError(
-            response.status,
-            body ||
-              'The API rejected the simulator callback.'
-          );
+          if (
+            attempt <
+            options.maxAttempts
+          ) {
+            await wait(
+              200 * attempt
+            );
+          }
         }
-      } finally {
-        clearTimeout(timeout);
       }
+
+      throw (
+        lastError instanceof Error
+          ? lastError
+          : new Error(
+              'The API callback failed.'
+            )
+      );
     },
   };
 }

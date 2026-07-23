@@ -27,6 +27,8 @@ const callbackClient =
       environment.apiInternalToken,
     timeoutMs:
       environment.callbackTimeoutMs,
+    maxAttempts:
+      environment.callbackMaxAttempts,
   });
 
 const sessions =
@@ -100,6 +102,9 @@ try {
         environment.nodeEnv,
       host: environment.host,
       port: environment.port,
+      callbackMaxAttempts:
+        environment
+          .callbackMaxAttempts,
     },
     'VoiceNexus telephony simulator started'
   );

@@ -9,6 +9,10 @@ import {
 } from './config/environment.js';
 
 import {
+  createActiveCallStore,
+} from './infrastructure/active-call-store.js';
+
+import {
   createDependencyManager,
 } from './infrastructure/dependency-manager.js';
 
@@ -17,12 +21,20 @@ import {
 } from './infrastructure/prisma.js';
 
 import {
+  createTelephonyEventRepository,
+} from './infrastructure/telephony-event-repository.js';
+
+import {
   createTelephonySimulatorClient,
 } from './infrastructure/telephony-simulator-client.js';
 
 import {
   createCallOrchestrationService,
 } from './modules/calls/call-orchestration-service.js';
+
+import {
+  createCallRecoveryService,
+} from './modules/calls/call-recovery-service.js';
 
 import {
   createCallSessionService,
@@ -60,6 +72,29 @@ const dependencies =
     },
   });
 
+const activeCalls =
+  createActiveCallStore({
+    redisUrl:
+      environment.redisUrl,
+    timeoutMs:
+      environment
+        .dependencyTimeoutMs,
+    ttlSeconds:
+      environment
+        .activeCallTtlSeconds,
+    onError(error) {
+      console.error(
+        'Active-call Redis error:',
+        error
+      );
+    },
+  });
+
+const telephonyEvents =
+  createTelephonyEventRepository(
+    prisma
+  );
+
 const promptTemplates =
   createPromptTemplateService(
     prisma
@@ -86,8 +121,19 @@ const telephony =
 const orchestration =
   createCallOrchestrationService(
     calls,
-    telephony
+    telephony,
+    telephonyEvents,
+    activeCalls
   );
+
+const recovery =
+  createCallRecoveryService(
+    prisma,
+    activeCalls
+  );
+
+const restoredCalls =
+  await recovery.restore();
 
 const app = buildApp({
   serverOptions: {
@@ -102,6 +148,11 @@ const app = buildApp({
   orchestration,
   internalApiToken:
     environment.internalApiToken,
+  activeCalls,
+  telephonyEvents,
+  closeables: [
+    activeCalls,
+  ],
 });
 
 let shutdownStarted = false;
@@ -166,6 +217,7 @@ try {
       telephonySimulatorUrl:
         environment
           .telephonySimulatorUrl,
+      restoredCalls,
     },
     'VoiceNexus API started'
   );

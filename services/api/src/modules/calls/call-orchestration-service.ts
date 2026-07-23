@@ -4,50 +4,34 @@ import {
 } from '../../generated/prisma/client.ts';
 
 import type {
-  TranscriptSpeaker,
-} from '../../generated/prisma/client.ts';
-
-import type {
   TelephonySimulatorClient,
   SimulatorScenarioId,
 } from '../../infrastructure/telephony-simulator-client.js';
+
+import type {
+  ActiveCallStore,
+} from '../../infrastructure/active-call-store.js';
+
+import type {
+  TelephonyEventRepository,
+} from '../../infrastructure/telephony-event-repository.js';
 
 import type {
   CallSessionDto,
   CallSessionService,
 } from './call-session-service.js';
 
-export const providerEventTypes = [
-  'ringing',
-  'connected',
-  'transcript',
-  'completed',
-  'failed',
-  'cancelled',
-] as const;
-
-export type ProviderEventType =
-  (typeof providerEventTypes)[number];
-
-export interface TelephonyProviderEventInput {
-  eventId: string;
-  sessionId: string;
-  callSessionId: string;
-  occurredAt: string;
-  type: ProviderEventType;
-  speaker?: TranscriptSpeaker;
-  content?: string;
-  confidence?: number | null;
-  sentiment?: SentimentLabel;
-  latencyMs?: number | null;
-  startedAtMs?: number | null;
-  endedAtMs?: number | null;
-  summary?: string;
-  reason?: string;
-}
+import type {
+  TelephonyProviderEventInput,
+} from './provider-event-contracts.js';
 
 export interface StartCallInput {
   scenarioId?: SimulatorScenarioId;
+}
+
+export interface ProviderEventProcessingResult {
+  duplicate: boolean;
+  call: CallSessionDto;
 }
 
 export interface CallOrchestrationService {
@@ -61,9 +45,8 @@ export interface CallOrchestrationService {
   ): Promise<CallSessionDto>;
 
   handleProviderEvent(
-    event:
-      TelephonyProviderEventInput
-  ): Promise<CallSessionDto>;
+    event: TelephonyProviderEventInput
+  ): Promise<ProviderEventProcessingResult>;
 }
 
 export class CallStartNotAllowedError
@@ -152,8 +135,75 @@ function isTerminal(
 export function createCallOrchestrationService(
   calls: CallSessionService,
   telephony:
-    TelephonySimulatorClient
+    TelephonySimulatorClient,
+  events:
+    TelephonyEventRepository,
+  activeCalls:
+    ActiveCallStore
 ): CallOrchestrationService {
+  async function syncActiveState(
+    call: CallSessionDto,
+    sessionId?: string | null
+  ): Promise<void> {
+    if (isTerminal(call.status)) {
+      await activeCalls.remove(
+        call.id
+      );
+
+      return;
+    }
+
+    await activeCalls.set({
+      callSessionId: call.id,
+      sessionId:
+        sessionId ??
+        call.providerCallId,
+      status: call.status,
+      destinationNumber:
+        call.destinationNumber,
+      provider: call.provider,
+      updatedAt: call.updatedAt,
+    });
+  }
+
+  async function moveToInProgress(
+    call: CallSessionDto
+  ): Promise<CallSessionDto> {
+    let current = call;
+
+    if (
+      current.status ===
+      CallStatus.QUEUED
+    ) {
+      current =
+        await calls.changeStatus(
+          current.id,
+          {
+            status:
+              CallStatus.STARTING,
+          }
+        );
+    }
+
+    if (
+      current.status ===
+        CallStatus.STARTING ||
+      current.status ===
+        CallStatus.RINGING
+    ) {
+      current =
+        await calls.changeStatus(
+          current.id,
+          {
+            status:
+              CallStatus.IN_PROGRESS,
+          }
+        );
+    }
+
+    return current;
+  }
+
   return {
     async start(
       id: string,
@@ -171,9 +221,19 @@ export function createCallOrchestrationService(
         );
       }
 
-      await calls.changeStatus(id, {
-        status: CallStatus.QUEUED,
-      });
+      const queued =
+        await calls.changeStatus(
+          id,
+          {
+            status:
+              CallStatus.QUEUED,
+          }
+        );
+
+      await syncActiveState(
+        queued,
+        null
+      );
 
       try {
         const session =
@@ -193,25 +253,40 @@ export function createCallOrchestrationService(
               : {}),
           });
 
-        return calls.changeStatus(
-          id,
-          {
-            status:
-              CallStatus.STARTING,
-            provider:
-              'telephony-simulator',
-            providerCallId:
-              session.id,
-          }
+        const starting =
+          await calls.changeStatus(
+            id,
+            {
+              status:
+                CallStatus.STARTING,
+              provider:
+                'telephony-simulator',
+              providerCallId:
+                session.id,
+            }
+          );
+
+        await syncActiveState(
+          starting,
+          session.id
         );
+
+        return starting;
       } catch (error) {
-        await calls.changeStatus(id, {
-          status: CallStatus.FAILED,
-          failureReason:
-            error instanceof Error
-              ? error.message
-              : 'The simulator failed to start.',
-        });
+        const failed =
+          await calls.changeStatus(
+            id,
+            {
+              status:
+                CallStatus.FAILED,
+              failureReason:
+                error instanceof Error
+                  ? error.message
+                  : 'The simulator failed to start.',
+            }
+          );
+
+        await syncActiveState(failed);
 
         throw error;
       }
@@ -235,156 +310,242 @@ export function createCallOrchestrationService(
             call.providerCallId
           );
         } catch {
-          // The API still records the local
-          // cancellation if the simulator
-          // session already stopped.
+          // The local state still becomes
+          // cancelled if the provider
+          // already ended its session.
         }
       }
 
-      return calls.changeStatus(id, {
-        status:
-          CallStatus.CANCELLED,
-      });
+      const cancelled =
+        await calls.changeStatus(
+          id,
+          {
+            status:
+              CallStatus.CANCELLED,
+          }
+        );
+
+      await syncActiveState(
+        cancelled
+      );
+
+      return cancelled;
     },
 
     async handleProviderEvent(
       event:
         TelephonyProviderEventInput
-    ): Promise<CallSessionDto> {
-      const call =
-        await calls.getById(
-          event.callSessionId
-        );
+    ): Promise<ProviderEventProcessingResult> {
+      const claim =
+        await events.claim(event);
 
-      if (
-        call.providerCallId &&
-        call.providerCallId !==
-          event.sessionId
-      ) {
-        throw new ProviderSessionMismatchError();
+      if (claim.duplicate) {
+        return {
+          duplicate: true,
+          call:
+            await calls.getById(
+              event.callSessionId
+            ),
+        };
       }
 
-      if (isTerminal(call.status)) {
-        return call;
-      }
-
-      switch (event.type) {
-        case 'ringing':
-          if (
-            call.status ===
-              CallStatus.STARTING
-          ) {
-            return calls.changeStatus(
-              call.id,
-              {
-                status:
-                  CallStatus.RINGING,
-              }
-            );
-          }
-
-          return call;
-
-        case 'connected':
-          if (
-            call.status ===
-              CallStatus.STARTING ||
-            call.status ===
-              CallStatus.RINGING
-          ) {
-            return calls.changeStatus(
-              call.id,
-              {
-                status:
-                  CallStatus.IN_PROGRESS,
-              }
-            );
-          }
-
-          return call;
-
-        case 'transcript': {
-          const speaker =
-            event.speaker;
-
-          if (!speaker) {
-            throw new ProviderEventValidationError(
-              'speaker is required for transcript events.'
-            );
-          }
-
-          await calls.addTranscriptSegment(
-            call.id,
-            {
-              speaker,
-              content:
-                requireString(
-                  event.content,
-                  'content'
-                ),
-              confidence:
-                event.confidence ??
-                null,
-              sentiment:
-                event.sentiment ??
-                SentimentLabel.UNKNOWN,
-              latencyMs:
-                event.latencyMs ??
-                null,
-              startedAtMs:
-                event.startedAtMs ??
-                null,
-              endedAtMs:
-                event.endedAtMs ??
-                null,
-            }
+      try {
+        let call =
+          await calls.getById(
+            event.callSessionId
           );
 
-          return calls.getById(
-            call.id
-          );
+        if (
+          call.providerCallId &&
+          call.providerCallId !==
+            event.sessionId
+        ) {
+          throw new ProviderSessionMismatchError();
         }
 
-        case 'completed':
-          return calls.finalize(
-            call.id,
-            {
-              summary:
-                requireString(
-                  event.summary,
-                  'summary'
-                ),
-              sentiment:
-                event.sentiment ??
-                SentimentLabel.NEUTRAL,
-            }
+        if (isTerminal(call.status)) {
+          await events.markProcessed(
+            claim.id
           );
 
-        case 'failed':
-          return calls.changeStatus(
-            call.id,
-            {
-              status:
-                CallStatus.FAILED,
-              failureReason:
-                requireString(
-                  event.reason,
-                  'reason'
-                ),
-            }
+          await syncActiveState(
+            call
           );
 
-        case 'cancelled':
-          return calls.changeStatus(
-            call.id,
-            {
-              status:
-                CallStatus.CANCELLED,
-              failureReason:
-                event.reason?.trim() ||
-                null,
+          return {
+            duplicate: false,
+            call,
+          };
+        }
+
+        switch (event.type) {
+          case 'ringing':
+            if (
+              call.status ===
+              CallStatus.QUEUED
+            ) {
+              call =
+                await calls.changeStatus(
+                  call.id,
+                  {
+                    status:
+                      CallStatus.STARTING,
+                  }
+                );
             }
-          );
+
+            if (
+              call.status ===
+              CallStatus.STARTING
+            ) {
+              call =
+                await calls.changeStatus(
+                  call.id,
+                  {
+                    status:
+                      CallStatus.RINGING,
+                  }
+                );
+            }
+
+            break;
+
+          case 'connected':
+            call =
+              await moveToInProgress(
+                call
+              );
+
+            break;
+
+          case 'transcript': {
+            call =
+              await moveToInProgress(
+                call
+              );
+
+            const speaker =
+              event.speaker;
+
+            if (!speaker) {
+              throw new ProviderEventValidationError(
+                'speaker is required for transcript events.'
+              );
+            }
+
+            await calls
+              .addTranscriptSegment(
+                call.id,
+                {
+                  speaker,
+                  content:
+                    requireString(
+                      event.content,
+                      'content'
+                    ),
+                  confidence:
+                    event.confidence ??
+                    null,
+                  sentiment:
+                    event.sentiment ??
+                    SentimentLabel.UNKNOWN,
+                  latencyMs:
+                    event.latencyMs ??
+                    null,
+                  startedAtMs:
+                    event.startedAtMs ??
+                    null,
+                  endedAtMs:
+                    event.endedAtMs ??
+                    null,
+                }
+              );
+
+            call =
+              await calls.getById(
+                call.id
+              );
+
+            break;
+          }
+
+          case 'completed':
+            call =
+              await moveToInProgress(
+                call
+              );
+
+            call =
+              await calls.finalize(
+                call.id,
+                {
+                  summary:
+                    requireString(
+                      event.summary,
+                      'summary'
+                    ),
+                  sentiment:
+                    event.sentiment ??
+                    SentimentLabel.NEUTRAL,
+                }
+              );
+
+            break;
+
+          case 'failed':
+            call =
+              await calls.changeStatus(
+                call.id,
+                {
+                  status:
+                    CallStatus.FAILED,
+                  failureReason:
+                    requireString(
+                      event.reason,
+                      'reason'
+                    ),
+                }
+              );
+
+            break;
+
+          case 'cancelled':
+            call =
+              await calls.changeStatus(
+                call.id,
+                {
+                  status:
+                    CallStatus.CANCELLED,
+                  failureReason:
+                    event.reason
+                      ?.trim() ||
+                    null,
+                }
+              );
+
+            break;
+        }
+
+        await events.markProcessed(
+          claim.id
+        );
+
+        await syncActiveState(
+          call,
+          event.sessionId
+        );
+
+        return {
+          duplicate: false,
+          call,
+        };
+      } catch (error) {
+        await events.markFailed(
+          claim.id,
+          error
+        );
+
+        throw error;
       }
     },
   };

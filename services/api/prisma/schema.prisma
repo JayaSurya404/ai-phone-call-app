@@ -36,6 +36,15 @@ enum SentimentLabel {
   UNKNOWN
 }
 
+enum TelephonyEventType {
+  RINGING
+  CONNECTED
+  TRANSCRIPT
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
 model PromptTemplate {
   id          String        @id @default(uuid()) @db.Uuid
   name        String        @unique @db.VarChar(120)
@@ -67,6 +76,7 @@ model CallSession {
   updatedAt          DateTime            @updatedAt @db.Timestamptz(3)
   promptTemplate     PromptTemplate?     @relation(fields: [promptTemplateId], references: [id], onDelete: SetNull)
   transcriptSegments TranscriptSegment[]
+  telephonyEvents    TelephonyEvent[]
 
   @@index([promptTemplateId])
   @@index([status, createdAt])
@@ -91,4 +101,23 @@ model TranscriptSegment {
   @@unique([callSessionId, sequence])
   @@index([callSessionId, createdAt])
   @@map("transcript_segments")
+}
+
+model TelephonyEvent {
+  id              String             @id @default(uuid()) @db.Uuid
+  providerEventId String             @unique @db.VarChar(191)
+  sessionId       String             @db.VarChar(191)
+  callSessionId   String             @db.Uuid
+  type            TelephonyEventType
+  occurredAt      DateTime           @db.Timestamptz(3)
+  payload         Json
+  processedAt     DateTime?          @db.Timestamptz(3)
+  processingError String?            @db.Text
+  createdAt       DateTime           @default(now()) @db.Timestamptz(3)
+  callSession     CallSession        @relation(fields: [callSessionId], references: [id], onDelete: Cascade)
+
+  @@index([callSessionId, occurredAt])
+  @@index([sessionId, occurredAt])
+  @@index([processedAt])
+  @@map("telephony_events")
 }
