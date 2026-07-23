@@ -1,6 +1,8 @@
 import 'dotenv/config';
 
-import { buildApp } from './app.js';
+import {
+  buildApp,
+} from './app.js';
 
 import {
   loadEnvironment,
@@ -15,6 +17,14 @@ import {
 } from './infrastructure/prisma.js';
 
 import {
+  createTelephonySimulatorClient,
+} from './infrastructure/telephony-simulator-client.js';
+
+import {
+  createCallOrchestrationService,
+} from './modules/calls/call-orchestration-service.js';
+
+import {
   createCallSessionService,
 } from './modules/calls/call-session-service.js';
 
@@ -25,22 +35,23 @@ import {
 const environment =
   loadEnvironment();
 
-const prisma = createPrismaClient({
-  databaseUrl:
-    environment.databaseUrl,
-
-  timeoutMs:
-    environment.dependencyTimeoutMs,
-});
+const prisma =
+  createPrismaClient({
+    databaseUrl:
+      environment.databaseUrl,
+    timeoutMs:
+      environment
+        .dependencyTimeoutMs,
+  });
 
 const dependencies =
   createDependencyManager({
     prisma,
-    redisUrl: environment.redisUrl,
-
+    redisUrl:
+      environment.redisUrl,
     timeoutMs:
-      environment.dependencyTimeoutMs,
-
+      environment
+        .dependencyTimeoutMs,
     onRedisError(error) {
       console.error(
         'Redis client error:',
@@ -50,21 +61,47 @@ const dependencies =
   });
 
 const promptTemplates =
-  createPromptTemplateService(prisma);
+  createPromptTemplateService(
+    prisma
+  );
 
 const calls =
-  createCallSessionService(prisma);
+  createCallSessionService(
+    prisma
+  );
+
+const telephony =
+  createTelephonySimulatorClient({
+    baseUrl:
+      environment
+        .telephonySimulatorUrl,
+    internalToken:
+      environment
+        .telephonySimulatorToken,
+    timeoutMs:
+      environment
+        .telephonyTimeoutMs,
+  });
+
+const orchestration =
+  createCallOrchestrationService(
+    calls,
+    telephony
+  );
 
 const app = buildApp({
   serverOptions: {
     logger: {
-      level: environment.logLevel,
+      level:
+        environment.logLevel,
     },
   },
-
   dependencies,
   promptTemplates,
   calls,
+  orchestration,
+  internalApiToken:
+    environment.internalApiToken,
 });
 
 let shutdownStarted = false;
@@ -121,12 +158,14 @@ try {
     {
       environment:
         environment.nodeEnv,
-
       host: environment.host,
       port: environment.port,
-
       dependencyTimeoutMs:
-        environment.dependencyTimeoutMs,
+        environment
+          .dependencyTimeoutMs,
+      telephonySimulatorUrl:
+        environment
+          .telephonySimulatorUrl,
     },
     'VoiceNexus API started'
   );

@@ -11,7 +11,7 @@ const supportedLogLevels = [
 type LogLevel =
   (typeof supportedLogLevels)[number];
 
-export interface Environment {
+export interface SimulatorEnvironment {
   nodeEnv:
     | 'development'
     | 'test'
@@ -19,16 +19,14 @@ export interface Environment {
   host: string;
   port: number;
   logLevel: LogLevel;
-  databaseUrl: string;
-  redisUrl: string;
-  dependencyTimeoutMs: number;
-  internalApiToken: string;
-  telephonySimulatorUrl: string;
-  telephonySimulatorToken: string;
-  telephonyTimeoutMs: number;
+  internalToken: string;
+  apiBaseUrl: string;
+  apiInternalToken: string;
+  callbackTimeoutMs: number;
+  scenarioSpeedMultiplier: number;
 }
 
-function requiredString(
+function readRequired(
   source: NodeJS.ProcessEnv,
   key: string,
   fallback?: string
@@ -46,15 +44,16 @@ function requiredString(
   return value;
 }
 
-function positiveInteger(
+function readPositiveInteger(
   source: NodeJS.ProcessEnv,
   key: string,
   fallback: number
 ): number {
-  const value = Number(
+  const raw =
     source[key]?.trim() ??
-    String(fallback)
-  );
+    String(fallback);
+
+  const value = Number(raw);
 
   if (
     !Number.isInteger(value) ||
@@ -68,15 +67,35 @@ function positiveInteger(
   return value;
 }
 
-function validatedUrl(
+function readPositiveNumber(
   source: NodeJS.ProcessEnv,
   key: string,
-  fallback:
-    | string
-    | undefined,
-  protocols: readonly string[]
+  fallback: number
+): number {
+  const raw =
+    source[key]?.trim() ??
+    String(fallback);
+
+  const value = Number(raw);
+
+  if (
+    !Number.isFinite(value) ||
+    value <= 0
+  ) {
+    throw new Error(
+      `${key} must be a positive number.`
+    );
+  }
+
+  return value;
+}
+
+function readHttpUrl(
+  source: NodeJS.ProcessEnv,
+  key: string,
+  fallback: string
 ): string {
-  const raw = requiredString(
+  const raw = readRequired(
     source,
     key,
     fallback
@@ -93,12 +112,11 @@ function validatedUrl(
   }
 
   if (
-    !protocols.includes(
-      url.protocol
-    )
+    url.protocol !== 'http:' &&
+    url.protocol !== 'https:'
   ) {
     throw new Error(
-      `${key} has an unsupported protocol.`
+      `${key} must use HTTP or HTTPS.`
     );
   }
 
@@ -108,10 +126,10 @@ function validatedUrl(
   );
 }
 
-export function loadEnvironment(
+export function loadSimulatorEnvironment(
   source: NodeJS.ProcessEnv =
     process.env
-): Environment {
+): SimulatorEnvironment {
   const nodeEnv =
     source.NODE_ENV?.trim() ||
     'development';
@@ -143,67 +161,40 @@ export function loadEnvironment(
   return {
     nodeEnv,
     host:
-      source.API_HOST?.trim() ||
+      source.SIMULATOR_HOST?.trim() ||
       '0.0.0.0',
-    port: positiveInteger(
+    port: readPositiveInteger(
       source,
-      'API_PORT',
-      3000
+      'SIMULATOR_PORT',
+      3100
     ),
     logLevel: logLevel as LogLevel,
-    databaseUrl:
-      validatedUrl(
+    internalToken: readRequired(
+      source,
+      'SIMULATOR_INTERNAL_TOKEN',
+      'voicenexus_local_simulator_token_2026'
+    ),
+    apiBaseUrl: readHttpUrl(
+      source,
+      'API_BASE_URL',
+      'http://127.0.0.1:3000'
+    ),
+    apiInternalToken: readRequired(
+      source,
+      'API_INTERNAL_TOKEN',
+      'voicenexus_local_api_internal_token_2026'
+    ),
+    callbackTimeoutMs:
+      readPositiveInteger(
         source,
-        'DATABASE_URL',
-        undefined,
-        [
-          'postgresql:',
-          'postgres:',
-        ]
-      ),
-    redisUrl:
-      validatedUrl(
-        source,
-        'REDIS_URL',
-        undefined,
-        [
-          'redis:',
-          'rediss:',
-        ]
-      ),
-    dependencyTimeoutMs:
-      positiveInteger(
-        source,
-        'DEPENDENCY_TIMEOUT_MS',
-        2000
-      ),
-    internalApiToken:
-      requiredString(
-        source,
-        'INTERNAL_API_TOKEN',
-        'voicenexus_local_api_internal_token_2026'
-      ),
-    telephonySimulatorUrl:
-      validatedUrl(
-        source,
-        'TELEPHONY_SIMULATOR_URL',
-        'http://127.0.0.1:3100',
-        [
-          'http:',
-          'https:',
-        ]
-      ),
-    telephonySimulatorToken:
-      requiredString(
-        source,
-        'TELEPHONY_SIMULATOR_TOKEN',
-        'voicenexus_local_simulator_token_2026'
-      ),
-    telephonyTimeoutMs:
-      positiveInteger(
-        source,
-        'TELEPHONY_TIMEOUT_MS',
+        'CALLBACK_TIMEOUT_MS',
         3000
+      ),
+    scenarioSpeedMultiplier:
+      readPositiveNumber(
+        source,
+        'SCENARIO_SPEED_MULTIPLIER',
+        1
       ),
   };
 }

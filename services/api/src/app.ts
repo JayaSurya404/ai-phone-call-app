@@ -8,12 +8,20 @@ import type {
 } from './infrastructure/dependency-manager.js';
 
 import type {
+  CallOrchestrationService,
+} from './modules/calls/call-orchestration-service.js';
+
+import type {
   CallSessionService,
 } from './modules/calls/call-session-service.js';
 
 import type {
   PromptTemplateService,
 } from './modules/prompt-templates/prompt-template-service.js';
+
+import {
+  callOperationRoutes,
+} from './routes/call-operations.js';
 
 import {
   callRoutes,
@@ -24,15 +32,24 @@ import {
 } from './routes/health.js';
 
 import {
+  internalTelephonyRoutes,
+} from './routes/internal-telephony.js';
+
+import {
   promptTemplateRoutes,
 } from './routes/prompt-templates.js';
 
 export interface BuildAppOptions {
-  serverOptions?: FastifyServerOptions;
-  dependencies: DependencyManager;
+  serverOptions?:
+    FastifyServerOptions;
+  dependencies:
+    DependencyManager;
   promptTemplates?:
     PromptTemplateService;
   calls?: CallSessionService;
+  orchestration?:
+    CallOrchestrationService;
+  internalApiToken?: string;
 }
 
 function getErrorStatusCode(
@@ -42,8 +59,11 @@ function getErrorStatusCode(
     typeof error === 'object' &&
     error !== null &&
     'statusCode' in error &&
-    typeof error.statusCode === 'number' &&
-    Number.isInteger(error.statusCode) &&
+    typeof error.statusCode ===
+      'number' &&
+    Number.isInteger(
+      error.statusCode
+    ) &&
     error.statusCode >= 400 &&
     error.statusCode <= 599
   ) {
@@ -88,16 +108,18 @@ export function buildApp(
 
   app.register(healthRoutes, {
     prefix: '/api/v1',
-    dependencies: options.dependencies,
+    dependencies:
+      options.dependencies,
   });
 
-  if (options.promptTemplates) {
+  if (
+    options.promptTemplates
+  ) {
     app.register(
       promptTemplateRoutes,
       {
         prefix:
           '/api/v1/prompt-templates',
-
         promptTemplates:
           options.promptTemplates,
       }
@@ -106,21 +128,54 @@ export function buildApp(
 
   if (options.calls) {
     app.register(callRoutes, {
-      prefix: '/api/v1/calls',
+      prefix:
+        '/api/v1/calls',
       calls: options.calls,
     });
   }
 
-  app.addHook('onClose', async () => {
-    await options.dependencies.close();
-  });
+  if (options.orchestration) {
+    app.register(
+      callOperationRoutes,
+      {
+        prefix:
+          '/api/v1/calls',
+        orchestration:
+          options.orchestration,
+      }
+    );
+  }
+
+  if (
+    options.orchestration &&
+    options.internalApiToken
+  ) {
+    app.register(
+      internalTelephonyRoutes,
+      {
+        prefix:
+          '/api/v1/internal/telephony',
+        internalToken:
+          options.internalApiToken,
+        orchestration:
+          options.orchestration,
+      }
+    );
+  }
+
+  app.addHook(
+    'onClose',
+    async () => {
+      await options.dependencies
+        .close();
+    }
+  );
 
   app.setNotFoundHandler(
     async (request, reply) => {
       return reply.status(404).send({
         statusCode: 404,
         error: 'Not Found',
-
         message:
           `Route ${request.method} ` +
           `${request.url} was not found.`,
@@ -129,7 +184,11 @@ export function buildApp(
   );
 
   app.setErrorHandler(
-    async (error, request, reply) => {
+    async (
+      error,
+      request,
+      reply
+    ) => {
       request.log.error(
         {
           error,
@@ -142,19 +201,19 @@ export function buildApp(
       const statusCode =
         getErrorStatusCode(error);
 
-      return reply.status(statusCode).send({
-        statusCode,
-
-        error:
-          statusCode >= 500
-            ? 'Internal Server Error'
-            : getErrorName(error),
-
-        message:
-          statusCode >= 500
-            ? 'An unexpected server error occurred.'
-            : getErrorMessage(error),
-      });
+      return reply
+        .status(statusCode)
+        .send({
+          statusCode,
+          error:
+            statusCode >= 500
+              ? 'Internal Server Error'
+              : getErrorName(error),
+          message:
+            statusCode >= 500
+              ? 'An unexpected server error occurred.'
+              : getErrorMessage(error),
+        });
     }
   );
 
