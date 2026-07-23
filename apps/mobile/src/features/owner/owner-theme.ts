@@ -1,0 +1,16 @@
+export const ownerTheme = {
+  background: '#070A12',
+  surface: '#0D1321',
+  surfaceElevated: '#111A2C',
+  border: '#243044',
+  text: '#F8FAFC',
+  textMuted: '#94A3B8',
+  textDim: '#64748B',
+  purple: '#8B5CF6',
+  purpleLight: '#C4B5FD',
+  cyan: '#22D3EE',
+  green: '#22C55E',
+  orange: '#F97316',
+  red: '#EF4444',
+  yellow: '#EAB308',
+} as const;

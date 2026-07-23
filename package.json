@@ -12,7 +12,8 @@
   "workspaces": [
     "apps/*",
     "services/*",
-    "packages/*"
+    "packages/*",
+    "apps/mobile"
   ],
   "scripts": {
     "workspaces:list": "npm query .workspace",
