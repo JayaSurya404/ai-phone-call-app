@@ -3,12 +3,25 @@ import fastify, {
   type FastifyServerOptions,
 } from 'fastify';
 
-import type { DependencyManager } from './infrastructure/dependency-manager.js';
-import { healthRoutes } from './routes/health.js';
+import type {
+  DependencyManager,
+} from './infrastructure/dependency-manager.js';
+
+import type {
+  CallSessionService,
+} from './modules/calls/call-session-service.js';
 
 import type {
   PromptTemplateService,
 } from './modules/prompt-templates/prompt-template-service.js';
+
+import {
+  callRoutes,
+} from './routes/calls.js';
+
+import {
+  healthRoutes,
+} from './routes/health.js';
 
 import {
   promptTemplateRoutes,
@@ -17,11 +30,14 @@ import {
 export interface BuildAppOptions {
   serverOptions?: FastifyServerOptions;
   dependencies: DependencyManager;
-   promptTemplates?:
+  promptTemplates?:
     PromptTemplateService;
+  calls?: CallSessionService;
 }
 
-function getErrorStatusCode(error: unknown): number {
+function getErrorStatusCode(
+  error: unknown
+): number {
   if (
     typeof error === 'object' &&
     error !== null &&
@@ -37,7 +53,9 @@ function getErrorStatusCode(error: unknown): number {
   return 500;
 }
 
-function getErrorName(error: unknown): string {
+function getErrorName(
+  error: unknown
+): string {
   if (
     error instanceof Error &&
     error.name.trim() !== ''
@@ -48,7 +66,9 @@ function getErrorName(error: unknown): string {
   return 'Error';
 }
 
-function getErrorMessage(error: unknown): string {
+function getErrorMessage(
+  error: unknown
+): string {
   if (
     error instanceof Error &&
     error.message.trim() !== ''
@@ -72,17 +92,24 @@ export function buildApp(
   });
 
   if (options.promptTemplates) {
-  app.register(
-    promptTemplateRoutes,
-    {
-      prefix:
-        '/api/v1/prompt-templates',
+    app.register(
+      promptTemplateRoutes,
+      {
+        prefix:
+          '/api/v1/prompt-templates',
 
-      promptTemplates:
-        options.promptTemplates,
-    }
-  );
-}
+        promptTemplates:
+          options.promptTemplates,
+      }
+    );
+  }
+
+  if (options.calls) {
+    app.register(callRoutes, {
+      prefix: '/api/v1/calls',
+      calls: options.calls,
+    });
+  }
 
   app.addHook('onClose', async () => {
     await options.dependencies.close();
@@ -93,6 +120,7 @@ export function buildApp(
       return reply.status(404).send({
         statusCode: 404,
         error: 'Not Found',
+
         message:
           `Route ${request.method} ` +
           `${request.url} was not found.`,
