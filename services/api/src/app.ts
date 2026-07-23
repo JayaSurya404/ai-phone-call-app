@@ -1,3 +1,5 @@
+import websocket from '@fastify/websocket';
+
 import fastify, {
   type FastifyInstance,
   type FastifyServerOptions,
@@ -6,6 +8,10 @@ import fastify, {
 import type {
   ActiveCallStore,
 } from './infrastructure/active-call-store.js';
+
+import type {
+  CallRealtimeHub,
+} from './infrastructure/call-realtime-hub.js';
 
 import type {
   DependencyManager,
@@ -63,6 +69,10 @@ import {
   promptTemplateRoutes,
 } from './routes/prompt-templates.js';
 
+import {
+  realtimeRoutes,
+} from './routes/realtime.js';
+
 interface Closeable {
   close(): Promise<void>;
 }
@@ -78,7 +88,8 @@ export interface BuildAppOptions {
     CallSessionService;
   orchestration?:
     CallOrchestrationService;
-  internalApiToken?: string;
+  internalApiToken?:
+    string;
   activeCalls?:
     ActiveCallStore;
   telephonyEvents?:
@@ -87,6 +98,12 @@ export interface BuildAppOptions {
     AiProviderRegistry;
   aiTurns?:
     AiTurnService;
+  realtimeHub?:
+    CallRealtimeHub;
+  realtimeClientToken?:
+    string;
+  realtimeHeartbeatMs?:
+    number;
   closeables?:
     readonly Closeable[];
 }
@@ -148,8 +165,41 @@ export function buildApp(
     options.serverOptions ?? {}
   );
 
+  if (
+    options.calls &&
+    options.realtimeHub &&
+    options.realtimeClientToken &&
+    options.realtimeHeartbeatMs
+  ) {
+    app.register(websocket, {
+      options: {
+        maxPayload:
+          64 * 1024,
+      },
+
+      errorHandler(
+        error,
+        socket,
+        request
+      ) {
+        request.log.error(
+          {
+            error,
+          },
+          'Realtime WebSocket error'
+        );
+
+        socket.close(
+          1011,
+          'Realtime connection error.'
+        );
+      },
+    });
+  }
+
   app.register(healthRoutes, {
     prefix: '/api/v1',
+
     dependencies:
       options.dependencies,
   });
@@ -162,6 +212,7 @@ export function buildApp(
       {
         prefix:
           '/api/v1/prompt-templates',
+
         promptTemplates:
           options.promptTemplates,
       }
@@ -172,7 +223,9 @@ export function buildApp(
     app.register(callRoutes, {
       prefix:
         '/api/v1/calls',
-      calls: options.calls,
+
+      calls:
+        options.calls,
     });
   }
 
@@ -182,6 +235,7 @@ export function buildApp(
       {
         prefix:
           '/api/v1/calls',
+
         orchestration:
           options.orchestration,
       }
@@ -198,10 +252,13 @@ export function buildApp(
       {
         prefix:
           '/api/v1/calls',
+
         calls:
           options.calls,
+
         activeCalls:
           options.activeCalls,
+
         events:
           options.telephonyEvents,
       }
@@ -217,8 +274,10 @@ export function buildApp(
       {
         prefix:
           '/api/v1/internal/telephony',
+
         internalToken:
           options.internalApiToken,
+
         orchestration:
           options.orchestration,
       }
@@ -230,12 +289,44 @@ export function buildApp(
     options.aiTurns
   ) {
     app.register(aiRoutes, {
-      prefix: '/api/v1/ai',
+      prefix:
+        '/api/v1/ai',
+
       providers:
         options.aiProviders,
+
       aiTurns:
         options.aiTurns,
     });
+  }
+
+  if (
+    options.calls &&
+    options.realtimeHub &&
+    options.realtimeClientToken &&
+    options.realtimeHeartbeatMs
+  ) {
+    app.register(
+      realtimeRoutes,
+      {
+        prefix:
+          '/api/v1/realtime',
+
+        calls:
+          options.calls,
+
+        hub:
+          options.realtimeHub,
+
+        clientToken:
+          options
+            .realtimeClientToken,
+
+        heartbeatMs:
+          options
+            .realtimeHeartbeatMs,
+      }
+    );
   }
 
   app.addHook(
@@ -258,6 +349,7 @@ export function buildApp(
       return reply.status(404).send({
         statusCode: 404,
         error: 'Not Found',
+
         message:
           `Route ${request.method} ` +
           `${request.url} was not found.`,
@@ -274,8 +366,10 @@ export function buildApp(
       request.log.error(
         {
           error,
+
           method:
             request.method,
+
           url:
             request.url,
         },

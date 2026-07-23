@@ -13,6 +13,10 @@ import {
 } from './infrastructure/active-call-store.js';
 
 import {
+  createCallRealtimeHub,
+} from './infrastructure/call-realtime-hub.js';
+
+import {
   createDependencyManager,
 } from './infrastructure/dependency-manager.js';
 
@@ -51,6 +55,14 @@ import {
 import {
   createPromptTemplateService,
 } from './modules/prompt-templates/prompt-template-service.js';
+
+import {
+  createRealtimeAiTurnService,
+} from './modules/realtime/realtime-ai-turn-service.js';
+
+import {
+  createRealtimeOrchestrationService,
+} from './modules/realtime/realtime-orchestration-service.js';
 
 const environment =
   loadEnvironment();
@@ -105,6 +117,27 @@ const activeCalls =
     },
   });
 
+const realtimeHub =
+  createCallRealtimeHub({
+    redisUrl:
+      environment.redisUrl,
+
+    timeoutMs:
+      environment
+        .dependencyTimeoutMs,
+
+    channelPrefix:
+      environment
+        .realtimeChannelPrefix,
+
+    onError(error) {
+      console.error(
+        'Realtime Redis error:',
+        error
+      );
+    },
+  });
+
 const telephonyEvents =
   createTelephonyEventRepository(
     prisma
@@ -135,12 +168,18 @@ const telephony =
         .telephonyTimeoutMs,
   });
 
-const orchestration =
+const baseOrchestration =
   createCallOrchestrationService(
     calls,
     telephony,
     telephonyEvents,
     activeCalls
+  );
+
+const orchestration =
+  createRealtimeOrchestrationService(
+    baseOrchestration,
+    realtimeHub
   );
 
 const aiProviders =
@@ -174,10 +213,17 @@ const aiProviders =
         .textToSpeechProviderName,
   });
 
-const aiTurns =
+const baseAiTurns =
   createAiTurnService(
     calls,
     aiProviders
+  );
+
+const aiTurns =
+  createRealtimeAiTurnService(
+    baseAiTurns,
+    calls,
+    realtimeHub
   );
 
 const recovery =
@@ -210,9 +256,19 @@ const app = buildApp({
   telephonyEvents,
   aiProviders,
   aiTurns,
+  realtimeHub,
+
+  realtimeClientToken:
+    environment
+      .realtimeClientToken,
+
+  realtimeHeartbeatMs:
+    environment
+      .realtimeHeartbeatMs,
 
   closeables: [
     aiProviders,
+    realtimeHub,
     activeCalls,
   ],
 });
@@ -300,6 +356,9 @@ try {
         environment
           .aiProviderMode,
 
+      realtimeEnabled:
+        true,
+
       restoredCalls,
     },
     'VoiceNexus API started'
@@ -317,7 +376,8 @@ try {
   } catch (closeError) {
     app.log.error(
       {
-        error: closeError,
+        error:
+          closeError,
       },
       'API cleanup failed'
     );

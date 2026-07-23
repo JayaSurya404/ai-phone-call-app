@@ -22,20 +22,21 @@
     "lint": "eslint .",
     "typecheck": "tsc -p tsconfig.json",
     "test": "tsx --test",
-"check": "npm run prisma:validate && npm run lint && npm run typecheck && npm run test && npm run build",
+    "check": "npm run prisma:validate && npm run lint && npm run typecheck && npm run test && npm run build",
     "prisma:format": "prisma format",
-"prisma:validate": "prisma validate",
-"prisma:generate": "prisma generate",
-"prisma:migrate:dev": "prisma migrate dev",
-"prisma:migrate:status": "prisma migrate status",
-"db:smoke": "tsx scripts/database-smoke.ts",
-"pretypecheck": "npm run prisma:generate",
-"prebuild": "npm run prisma:generate"
+    "prisma:validate": "prisma validate",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate:dev": "prisma migrate dev",
+    "prisma:migrate:status": "prisma migrate status",
+    "db:smoke": "tsx scripts/database-smoke.ts",
+    "pretypecheck": "npm run prisma:generate",
+    "prebuild": "npm run prisma:generate"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",
     "@types/node": "^26.1.1",
     "@types/pg": "^8.20.0",
+    "@types/ws": "^8.5.10",
     "eslint": "^9.39.5",
     "globals": "^14.0.0",
     "prisma": "^7.9.0",
@@ -44,6 +45,7 @@
     "typescript-eslint": "^8.65.0"
   },
   "dependencies": {
+    "@fastify/websocket": "^11.3.0",
     "@prisma/adapter-pg": "^7.9.0",
     "@prisma/client": "^7.9.0",
     "dotenv": "^17.4.2",

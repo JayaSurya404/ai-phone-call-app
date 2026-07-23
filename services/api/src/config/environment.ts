@@ -36,6 +36,9 @@ export interface Environment {
   speechToTextProviderName: string;
   languageModelProviderName: string;
   textToSpeechProviderName: string;
+  realtimeClientToken: string;
+  realtimeHeartbeatMs: number;
+  realtimeChannelPrefix: string;
 }
 
 function requiredString(
@@ -298,6 +301,27 @@ export function loadEnvironment(
         source,
         'TTS_PROVIDER_NAME',
         'kokoro'
+      ),
+
+    realtimeClientToken:
+      requiredString(
+        source,
+        'REALTIME_CLIENT_TOKEN',
+        'voicenexus_local_realtime_token_2026'
+      ),
+
+    realtimeHeartbeatMs:
+      positiveInteger(
+        source,
+        'REALTIME_HEARTBEAT_MS',
+        15000
+      ),
+
+    realtimeChannelPrefix:
+      requiredString(
+        source,
+        'REALTIME_CHANNEL_PREFIX',
+        'voicenexus:call-events'
       ),
   };
 }
