@@ -1,4 +1,4 @@
-﻿import {
+import {
   OwnerScreen,
 } from '../features/owner/OwnerScreen';
 
