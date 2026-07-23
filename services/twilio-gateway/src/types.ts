@@ -1,3 +1,12 @@
+export type SupportedLanguage =
+  | 'en-IN'
+  | 'ta-IN'
+  | 'hi-IN';
+
+export type LanguageMode =
+  | SupportedLanguage
+  | 'multi';
+
 export interface ProviderCallback {
   url: string;
   signingSecret: string;
@@ -46,20 +55,17 @@ export interface ProviderEvent {
   reason?: string;
 }
 
-export type ProviderEventValues =
-  Omit<
-    ProviderEvent,
-    | 'eventId'
-    | 'sessionId'
-    | 'callSessionId'
-    | 'occurredAt'
-    | 'type'
-  >;
+export type ProviderEventValues = Omit<
+  ProviderEvent,
+  | 'eventId'
+  | 'sessionId'
+  | 'callSessionId'
+  | 'occurredAt'
+  | 'type'
+>;
 
 export interface ConversationMessage {
-  role:
-    | 'user'
-    | 'model';
+  role: 'user' | 'model';
   text: string;
 }
 
@@ -68,13 +74,14 @@ export interface ActiveGatewayCall {
   providerCallId: string;
   destinationNumber: string;
   promptSnapshot: string;
-  languageCode: string;
+  requestedLanguageMode: LanguageMode;
+  activeTranscriptionLanguage: LanguageMode;
+  lastReliableLanguage: SupportedLanguage;
+  openingGreeting: string;
   callback: ProviderCallback;
   history: ConversationMessage[];
   transcript: Array<{
-    speaker:
-      | 'AI_AGENT'
-      | 'REMOTE_PARTY';
+    speaker: 'AI_AGENT' | 'REMOTE_PARTY';
     content: string;
   }>;
   createdAt: string;
@@ -82,7 +89,6 @@ export interface ActiveGatewayCall {
   completedSent: boolean;
   lastCallerText?: string;
   lastCallerAtMs?: number;
-  timeout?: ReturnType<
-    typeof setTimeout
-  >;
+  reconnectAttempts: number;
+  timeout?: ReturnType<typeof setTimeout>;
 }
