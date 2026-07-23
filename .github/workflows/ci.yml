@@ -1,0 +1,82 @@
+name: VoiceNexus CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:17.10-alpine3.23
+        env:
+          POSTGRES_DB: voicenexus
+          POSTGRES_USER: voicenexus
+          POSTGRES_PASSWORD: voicenexus_ci_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U voicenexus -d voicenexus"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+      redis:
+        image: redis:8.8.0-alpine3.23
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      NODE_ENV: test
+      LOG_LEVEL: silent
+      DATABASE_URL: postgresql://voicenexus:voicenexus_ci_password@127.0.0.1:5432/voicenexus
+      REDIS_URL: redis://127.0.0.1:6379
+      INTERNAL_API_TOKEN: voicenexus_ci_internal_token
+      TELEPHONY_PROVIDER_MODE: simulator
+      TELEPHONY_SIMULATOR_URL: http://127.0.0.1:3100
+      TELEPHONY_SIMULATOR_TOKEN: voicenexus_ci_simulator_token
+      TELEPHONY_HTTP_URL: http://127.0.0.1:3300
+      TELEPHONY_HTTP_TOKEN: voicenexus_ci_http_token
+      TELEPHONY_HTTP_PROVIDER_NAME: generic-http-telephony
+      TELEPHONY_WEBHOOK_PUBLIC_URL: http://127.0.0.1:3000/api/v1/webhooks/telephony/events
+      TELEPHONY_WEBHOOK_SECRET: voicenexus_ci_webhook_secret
+      INFERENCE_INTERNAL_TOKEN: voicenexus_ci_inference_token
+      REALTIME_CLIENT_TOKEN: voicenexus_ci_realtime_token
+      CORS_ORIGINS: "*"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run prisma:deploy --workspace @voicenexus/api
+
+      - run: npm run api:check
+
+      - run: npm run check --workspace @voicenexus/telephony-simulator
+
+      - working-directory: apps/mobile
+        run: npx tsc --noEmit
+
+      - working-directory: apps/mobile
+        run: npm run lint
+
+      - working-directory: apps/mobile
+        run: npx expo export --platform android --output-dir "$RUNNER_TEMP/voicenexus-mobile"

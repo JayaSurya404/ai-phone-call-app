@@ -30,7 +30,8 @@
     "prisma:migrate:status": "prisma migrate status",
     "db:smoke": "tsx scripts/database-smoke.ts",
     "pretypecheck": "npm run prisma:generate",
-    "prebuild": "npm run prisma:generate"
+    "prebuild": "npm run prisma:generate",
+    "prisma:deploy": "prisma migrate deploy"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",
@@ -45,6 +46,9 @@
     "typescript-eslint": "^8.65.0"
   },
   "dependencies": {
+    "@fastify/cors": "^11.3.0",
+    "@fastify/helmet": "^13.1.0",
+    "@fastify/rate-limit": "^11.1.0",
     "@fastify/websocket": "^11.3.0",
     "@prisma/adapter-pg": "^7.9.0",
     "@prisma/client": "^7.9.0",

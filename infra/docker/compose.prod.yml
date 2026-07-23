@@ -1,0 +1,132 @@
+name: voicenexus-production
+
+services:
+  postgres:
+    image: postgres:17.10-alpine3.23
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - voicenexus-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - voicenexus-private
+
+  redis:
+    image: redis:8.8.0-alpine3.23
+    restart: unless-stopped
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+      - --requirepass
+      - ${REDIS_PASSWORD}
+    volumes:
+      - voicenexus-redis-data:/data
+    healthcheck:
+      test:
+        - CMD
+        - redis-cli
+        - -a
+        - ${REDIS_PASSWORD}
+        - ping
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - voicenexus-private
+
+  telephony-simulator:
+    build:
+      context: ../..
+      dockerfile: services/telephony-simulator/Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      SIMULATOR_HOST: 0.0.0.0
+      SIMULATOR_PORT: 3100
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      SIMULATOR_INTERNAL_TOKEN: ${TELEPHONY_SIMULATOR_TOKEN}
+      API_BASE_URL: http://api:3000
+      API_INTERNAL_TOKEN: ${INTERNAL_API_TOKEN}
+      CALLBACK_TIMEOUT_MS: ${TELEPHONY_TIMEOUT_MS:-5000}
+      SCENARIO_SPEED_MULTIPLIER: ${SCENARIO_SPEED_MULTIPLIER:-1}
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - voicenexus-private
+
+  api:
+    build:
+      context: ../..
+      dockerfile: services/api/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "${API_PUBLIC_PORT:-3000}:3000"
+    environment:
+      NODE_ENV: production
+      API_HOST: 0.0.0.0
+      API_PORT: 3000
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      DEPENDENCY_TIMEOUT_MS: ${DEPENDENCY_TIMEOUT_MS:-5000}
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN}
+      TELEPHONY_PROVIDER_MODE: ${TELEPHONY_PROVIDER_MODE:-simulator}
+      TELEPHONY_SIMULATOR_URL: http://telephony-simulator:3100
+      TELEPHONY_SIMULATOR_TOKEN: ${TELEPHONY_SIMULATOR_TOKEN}
+      TELEPHONY_HTTP_URL: ${TELEPHONY_HTTP_URL:-http://telephony-gateway:3300}
+      TELEPHONY_HTTP_TOKEN: ${TELEPHONY_HTTP_TOKEN}
+      TELEPHONY_HTTP_PROVIDER_NAME: ${TELEPHONY_HTTP_PROVIDER_NAME:-generic-http-telephony}
+      TELEPHONY_WEBHOOK_PUBLIC_URL: ${TELEPHONY_WEBHOOK_PUBLIC_URL}
+      TELEPHONY_WEBHOOK_SECRET: ${TELEPHONY_WEBHOOK_SECRET}
+      TELEPHONY_WEBHOOK_MAX_AGE_SECONDS: ${TELEPHONY_WEBHOOK_MAX_AGE_SECONDS:-300}
+      TELEPHONY_TIMEOUT_MS: ${TELEPHONY_TIMEOUT_MS:-5000}
+      ACTIVE_CALL_TTL_SECONDS: ${ACTIVE_CALL_TTL_SECONDS:-86400}
+      AI_PROVIDER_MODE: ${AI_PROVIDER_MODE:-simulated}
+      INFERENCE_BASE_URL: ${INFERENCE_BASE_URL:-http://inference:3200}
+      INFERENCE_INTERNAL_TOKEN: ${INFERENCE_INTERNAL_TOKEN}
+      INFERENCE_TIMEOUT_MS: ${INFERENCE_TIMEOUT_MS:-15000}
+      STT_PROVIDER_NAME: ${STT_PROVIDER_NAME:-faster-whisper}
+      LLM_PROVIDER_NAME: ${LLM_PROVIDER_NAME:-qwen}
+      TTS_PROVIDER_NAME: ${TTS_PROVIDER_NAME:-kokoro}
+      REALTIME_CLIENT_TOKEN: ${REALTIME_CLIENT_TOKEN}
+      REALTIME_HEARTBEAT_MS: ${REALTIME_HEARTBEAT_MS:-15000}
+      REALTIME_CHANNEL_PREFIX: ${REALTIME_CHANNEL_PREFIX:-voicenexus:call-events}
+      CORS_ORIGINS: ${CORS_ORIGINS}
+      RATE_LIMIT_MAX: ${RATE_LIMIT_MAX:-300}
+      RATE_LIMIT_WINDOW_MS: ${RATE_LIMIT_WINDOW_MS:-60000}
+      BODY_LIMIT_BYTES: ${BODY_LIMIT_BYTES:-1048576}
+      TRUST_PROXY: ${TRUST_PROXY:-true}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - wget -qO- http://127.0.0.1:3000/api/v1/health/live >/dev/null
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    networks:
+      - voicenexus-private
+
+volumes:
+  voicenexus-postgres-data:
+  voicenexus-redis-data:
+
+networks:
+  voicenexus-private:
+    driver: bridge

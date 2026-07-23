@@ -23,8 +23,17 @@ export interface Environment {
   redisUrl: string;
   dependencyTimeoutMs: number;
   internalApiToken: string;
+  telephonyProviderMode:
+    | 'simulator'
+    | 'http';
   telephonySimulatorUrl: string;
   telephonySimulatorToken: string;
+  telephonyHttpUrl: string;
+  telephonyHttpToken: string;
+  telephonyHttpProviderName: string;
+  telephonyWebhookPublicUrl: string;
+  telephonyWebhookSecret: string;
+  telephonyWebhookMaxAgeSeconds: number;
   telephonyTimeoutMs: number;
   activeCallTtlSeconds: number;
   aiProviderMode:
@@ -39,6 +48,11 @@ export interface Environment {
   realtimeClientToken: string;
   realtimeHeartbeatMs: number;
   realtimeChannelPrefix: string;
+  corsOrigins: string[];
+  rateLimitMax: number;
+  rateLimitWindowMs: number;
+  bodyLimitBytes: number;
+  trustProxy: boolean;
 }
 
 function requiredString(
@@ -79,6 +93,59 @@ function positiveInteger(
   }
 
   return value;
+}
+
+function booleanValue(
+  source: NodeJS.ProcessEnv,
+  key: string,
+  fallback: boolean
+): boolean {
+  const value =
+    source[key]?.trim()
+      .toLowerCase();
+
+  if (!value) {
+    return fallback;
+  }
+
+  if (value === 'true') {
+    return true;
+  }
+
+  if (value === 'false') {
+    return false;
+  }
+
+  throw new Error(
+    `${key} must be true or false.`
+  );
+}
+
+function commaSeparated(
+  source: NodeJS.ProcessEnv,
+  key: string,
+  fallback: string
+): string[] {
+  const values =
+    requiredString(
+      source,
+      key,
+      fallback
+    )
+      .split(',')
+      .map(
+        (value) =>
+          value.trim()
+      )
+      .filter(Boolean);
+
+  if (values.length === 0) {
+    throw new Error(
+      `${key} must contain at least one value.`
+    );
+  }
+
+  return values;
 }
 
 function validatedUrl(
@@ -154,6 +221,22 @@ export function loadEnvironment(
     );
   }
 
+  const telephonyProviderMode =
+    source.TELEPHONY_PROVIDER_MODE
+      ?.trim() ||
+    'simulator';
+
+  if (
+    telephonyProviderMode !==
+      'simulator' &&
+    telephonyProviderMode !==
+      'http'
+  ) {
+    throw new Error(
+      'TELEPHONY_PROVIDER_MODE must be simulator or http.'
+    );
+  }
+
   const aiProviderMode =
     source.AI_PROVIDER_MODE
       ?.trim() ||
@@ -223,6 +306,8 @@ export function loadEnvironment(
         'voicenexus_local_api_internal_token_2026'
       ),
 
+    telephonyProviderMode,
+
     telephonySimulatorUrl:
       validatedUrl(
         source,
@@ -241,11 +326,61 @@ export function loadEnvironment(
         'voicenexus_local_simulator_token_2026'
       ),
 
+    telephonyHttpUrl:
+      validatedUrl(
+        source,
+        'TELEPHONY_HTTP_URL',
+        'http://127.0.0.1:3300',
+        [
+          'http:',
+          'https:',
+        ]
+      ),
+
+    telephonyHttpToken:
+      requiredString(
+        source,
+        'TELEPHONY_HTTP_TOKEN',
+        'voicenexus_local_http_telephony_token_2026'
+      ),
+
+    telephonyHttpProviderName:
+      requiredString(
+        source,
+        'TELEPHONY_HTTP_PROVIDER_NAME',
+        'generic-http-telephony'
+      ),
+
+    telephonyWebhookPublicUrl:
+      validatedUrl(
+        source,
+        'TELEPHONY_WEBHOOK_PUBLIC_URL',
+        'http://127.0.0.1:3000/api/v1/webhooks/telephony/events',
+        [
+          'http:',
+          'https:',
+        ]
+      ),
+
+    telephonyWebhookSecret:
+      requiredString(
+        source,
+        'TELEPHONY_WEBHOOK_SECRET',
+        'voicenexus_local_webhook_secret_2026'
+      ),
+
+    telephonyWebhookMaxAgeSeconds:
+      positiveInteger(
+        source,
+        'TELEPHONY_WEBHOOK_MAX_AGE_SECONDS',
+        300
+      ),
+
     telephonyTimeoutMs:
       positiveInteger(
         source,
         'TELEPHONY_TIMEOUT_MS',
-        3000
+        5000
       ),
 
     activeCallTtlSeconds:
@@ -322,6 +457,43 @@ export function loadEnvironment(
         source,
         'REALTIME_CHANNEL_PREFIX',
         'voicenexus:call-events'
+      ),
+
+    corsOrigins:
+      commaSeparated(
+        source,
+        'CORS_ORIGINS',
+        nodeEnv === 'production'
+          ? 'https://example.invalid'
+          : '*'
+      ),
+
+    rateLimitMax:
+      positiveInteger(
+        source,
+        'RATE_LIMIT_MAX',
+        300
+      ),
+
+    rateLimitWindowMs:
+      positiveInteger(
+        source,
+        'RATE_LIMIT_WINDOW_MS',
+        60000
+      ),
+
+    bodyLimitBytes:
+      positiveInteger(
+        source,
+        'BODY_LIMIT_BYTES',
+        1048576
+      ),
+
+    trustProxy:
+      booleanValue(
+        source,
+        'TRUST_PROXY',
+        false
       ),
   };
 }

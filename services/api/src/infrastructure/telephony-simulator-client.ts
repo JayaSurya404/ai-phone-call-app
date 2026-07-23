@@ -23,6 +23,8 @@ export interface StartedSimulatorSession {
 }
 
 export interface TelephonySimulatorClient {
+  readonly providerName?: string;
+
   startSession(
     input: StartSimulatorInput
   ): Promise<StartedSimulatorSession>;
@@ -114,6 +116,9 @@ export function createTelephonySimulatorClient(
   }
 
   return {
+    providerName:
+      'telephony-simulator',
+
     async startSession(
       input: StartSimulatorInput
     ): Promise<StartedSimulatorSession> {

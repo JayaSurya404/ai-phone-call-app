@@ -260,6 +260,7 @@ export function createCallOrchestrationService(
               status:
                 CallStatus.STARTING,
               provider:
+                telephony.providerName ??
                 'telephony-simulator',
               providerCallId:
                 session.id,
@@ -282,7 +283,7 @@ export function createCallOrchestrationService(
               failureReason:
                 error instanceof Error
                   ? error.message
-                  : 'The simulator failed to start.',
+                  : 'The telephony provider failed to start.',
             }
           );
 

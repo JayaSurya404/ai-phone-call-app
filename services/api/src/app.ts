@@ -1,3 +1,6 @@
+import cors from '@fastify/cors';
+import helmet from '@fastify/helmet';
+import rateLimit from '@fastify/rate-limit';
 import websocket from '@fastify/websocket';
 
 import fastify, {
@@ -70,11 +73,27 @@ import {
 } from './routes/prompt-templates.js';
 
 import {
+  providerWebhookRoutes,
+} from './routes/provider-webhooks.js';
+
+import {
   realtimeRoutes,
 } from './routes/realtime.js';
 
 interface Closeable {
   close(): Promise<void>;
+}
+
+export interface ApiSecurityOptions {
+  corsOrigins:
+    readonly string[];
+  rateLimitMax: number;
+  rateLimitWindowMs: number;
+}
+
+export interface ProviderWebhookOptions {
+  signingSecret: string;
+  maxAgeSeconds: number;
 }
 
 export interface BuildAppOptions {
@@ -104,6 +123,10 @@ export interface BuildAppOptions {
     string;
   realtimeHeartbeatMs?:
     number;
+  security?:
+    ApiSecurityOptions;
+  providerWebhook?:
+    ProviderWebhookOptions;
   closeables?:
     readonly Closeable[];
 }
@@ -164,6 +187,45 @@ export function buildApp(
   const app = fastify(
     options.serverOptions ?? {}
   );
+
+  if (options.security) {
+    app.register(helmet, {
+      contentSecurityPolicy:
+        false,
+      crossOriginEmbedderPolicy:
+        false,
+    });
+
+    app.register(cors, {
+      origin:
+        options.security
+          .corsOrigins
+          .includes('*')
+          ? true
+          : [
+              ...options.security
+                .corsOrigins,
+            ],
+      credentials: false,
+      methods: [
+        'GET',
+        'POST',
+        'PATCH',
+        'DELETE',
+        'OPTIONS',
+      ],
+    });
+
+    app.register(rateLimit, {
+      global: true,
+      max:
+        options.security
+          .rateLimitMax,
+      timeWindow:
+        options.security
+          .rateLimitWindowMs,
+    });
+  }
 
   if (
     options.calls &&
@@ -280,6 +342,32 @@ export function buildApp(
 
         orchestration:
           options.orchestration,
+      }
+    );
+  }
+
+  if (
+    options.orchestration &&
+    options.providerWebhook
+  ) {
+    app.register(
+      providerWebhookRoutes,
+      {
+        prefix:
+          '/api/v1/webhooks/telephony',
+
+        orchestration:
+          options.orchestration,
+
+        signingSecret:
+          options
+            .providerWebhook
+            .signingSecret,
+
+        maxAgeSeconds:
+          options
+            .providerWebhook
+            .maxAgeSeconds,
       }
     );
   }

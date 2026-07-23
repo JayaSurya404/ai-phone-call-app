@@ -29,8 +29,8 @@ import {
 } from './infrastructure/telephony-event-repository.js';
 
 import {
-  createTelephonySimulatorClient,
-} from './infrastructure/telephony-simulator-client.js';
+  createTelephonyClient,
+} from './infrastructure/telephony-client-factory.js';
 
 import {
   createAiProviderRegistry,
@@ -154,18 +154,50 @@ const calls =
   );
 
 const telephony =
-  createTelephonySimulatorClient({
-    baseUrl:
+  createTelephonyClient({
+    mode:
       environment
-        .telephonySimulatorUrl,
+        .telephonyProviderMode,
 
-    internalToken:
-      environment
-        .telephonySimulatorToken,
+    simulator: {
+      baseUrl:
+        environment
+          .telephonySimulatorUrl,
 
-    timeoutMs:
-      environment
-        .telephonyTimeoutMs,
+      internalToken:
+        environment
+          .telephonySimulatorToken,
+
+      timeoutMs:
+        environment
+          .telephonyTimeoutMs,
+    },
+
+    http: {
+      baseUrl:
+        environment
+          .telephonyHttpUrl,
+
+      bearerToken:
+        environment
+          .telephonyHttpToken,
+
+      timeoutMs:
+        environment
+          .telephonyTimeoutMs,
+
+      providerName:
+        environment
+          .telephonyHttpProviderName,
+
+      callbackUrl:
+        environment
+          .telephonyWebhookPublicUrl,
+
+      callbackSecret:
+        environment
+          .telephonyWebhookSecret,
+    },
   });
 
 const baseOrchestration =
@@ -241,6 +273,14 @@ const app = buildApp({
       level:
         environment.logLevel,
     },
+
+    bodyLimit:
+      environment
+        .bodyLimitBytes,
+
+    trustProxy:
+      environment
+        .trustProxy,
   },
 
   dependencies,
@@ -265,6 +305,30 @@ const app = buildApp({
   realtimeHeartbeatMs:
     environment
       .realtimeHeartbeatMs,
+
+  security: {
+    corsOrigins:
+      environment
+        .corsOrigins,
+
+    rateLimitMax:
+      environment
+        .rateLimitMax,
+
+    rateLimitWindowMs:
+      environment
+        .rateLimitWindowMs,
+  },
+
+  providerWebhook: {
+    signingSecret:
+      environment
+        .telephonyWebhookSecret,
+
+    maxAgeSeconds:
+      environment
+        .telephonyWebhookMaxAgeSeconds,
+  },
 
   closeables: [
     aiProviders,
@@ -348,9 +412,9 @@ try {
         environment
           .dependencyTimeoutMs,
 
-      telephonySimulatorUrl:
+      telephonyProviderMode:
         environment
-          .telephonySimulatorUrl,
+          .telephonyProviderMode,
 
       aiProviderMode:
         environment
