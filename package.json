@@ -31,7 +31,9 @@
     "infra:down": "docker compose --env-file infra/docker/.env -f infra/docker/compose.dev.yml down",
     "infra:ps": "docker compose --env-file infra/docker/.env -f infra/docker/compose.dev.yml ps",
     "infra:logs": "docker compose --env-file infra/docker/.env -f infra/docker/compose.dev.yml logs -f",
-    "test": "npm run api:test"
+    "test": "npm run api:test",
+    "twilio:dev": "npm run dev --workspace @voicenexus/twilio-gateway",
+    "twilio:check": "npm run check --workspace @voicenexus/twilio-gateway"
   },
   "allowScripts": {
     "unrs-resolver": "1.12.2",
