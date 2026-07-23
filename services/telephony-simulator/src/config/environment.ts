@@ -27,14 +27,25 @@ export interface SimulatorEnvironment {
   scenarioSpeedMultiplier: number;
 }
 
+function nonEmpty(
+  value: string | undefined
+): string | undefined {
+  const trimmed = value?.trim();
+
+  return trimmed &&
+    trimmed.length > 0
+    ? trimmed
+    : undefined;
+}
+
 function readRequired(
   source: NodeJS.ProcessEnv,
   key: string,
   fallback?: string
 ): string {
   const value =
-    source[key]?.trim() ||
-    fallback?.trim();
+    nonEmpty(source[key]) ??
+    nonEmpty(fallback);
 
   if (!value) {
     throw new Error(
@@ -51,7 +62,7 @@ function readPositiveInteger(
   fallback: number
 ): number {
   const raw =
-    source[key]?.trim() ??
+    nonEmpty(source[key]) ??
     String(fallback);
 
   const value = Number(raw);
@@ -74,7 +85,7 @@ function readPositiveNumber(
   fallback: number
 ): number {
   const raw =
-    source[key]?.trim() ??
+    nonEmpty(source[key]) ??
     String(fallback);
 
   const value = Number(raw);
@@ -132,7 +143,7 @@ export function loadSimulatorEnvironment(
     process.env
 ): SimulatorEnvironment {
   const nodeEnv =
-    source.NODE_ENV?.trim() ||
+    nonEmpty(source.NODE_ENV) ??
     'development';
 
   if (
@@ -146,7 +157,7 @@ export function loadSimulatorEnvironment(
   }
 
   const logLevel =
-    source.LOG_LEVEL?.trim() ||
+    nonEmpty(source.LOG_LEVEL) ??
     'info';
 
   if (
@@ -162,29 +173,35 @@ export function loadSimulatorEnvironment(
   return {
     nodeEnv,
     host:
-      source.SIMULATOR_HOST?.trim() ||
+      nonEmpty(
+        source.SIMULATOR_HOST
+      ) ??
       '0.0.0.0',
     port: readPositiveInteger(
       source,
       'SIMULATOR_PORT',
       3100
     ),
-    logLevel: logLevel as LogLevel,
-    internalToken: readRequired(
-      source,
-      'SIMULATOR_INTERNAL_TOKEN',
-      'voicenexus_local_simulator_token_2026'
-    ),
-    apiBaseUrl: readHttpUrl(
-      source,
-      'API_BASE_URL',
-      'http://127.0.0.1:3000'
-    ),
-    apiInternalToken: readRequired(
-      source,
-      'API_INTERNAL_TOKEN',
-      'voicenexus_local_api_internal_token_2026'
-    ),
+    logLevel:
+      logLevel as LogLevel,
+    internalToken:
+      readRequired(
+        source,
+        'SIMULATOR_INTERNAL_TOKEN',
+        'voicenexus_local_simulator_token_2026'
+      ),
+    apiBaseUrl:
+      readHttpUrl(
+        source,
+        'API_BASE_URL',
+        'http://127.0.0.1:3000'
+      ),
+    apiInternalToken:
+      readRequired(
+        source,
+        'API_INTERNAL_TOKEN',
+        'voicenexus_local_api_internal_token_2026'
+      ),
     callbackTimeoutMs:
       readPositiveInteger(
         source,

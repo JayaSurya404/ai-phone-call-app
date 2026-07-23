@@ -30,12 +30,46 @@ function getStatusCode(
     error !== null &&
     'statusCode' in error &&
     typeof error.statusCode ===
-      'number'
+      'number' &&
+    Number.isInteger(
+      error.statusCode
+    ) &&
+    error.statusCode >= 400 &&
+    error.statusCode <= 599
   ) {
     return error.statusCode;
   }
 
   return 500;
+}
+
+function getErrorName(
+  error: unknown
+): string {
+  if (
+    error instanceof Error &&
+    error.name.trim() !== ''
+  ) {
+    return error.name;
+  }
+
+  return 'Error';
+}
+
+function getErrorMessage(
+  error: unknown
+): string {
+  if (
+    error instanceof Error &&
+    error.message.trim() !== ''
+  ) {
+    return error.message;
+  }
+
+  return (
+    'The simulator request ' +
+    'could not be completed.'
+  );
 }
 
 export function buildSimulatorApp(
@@ -71,7 +105,8 @@ export function buildSimulatorApp(
         statusCode: 404,
         error: 'Not Found',
         message:
-          `Route ${request.method} ${request.url} was not found.`,
+          `Route ${request.method} ` +
+          `${request.url} was not found.`,
       });
     }
   );
@@ -101,11 +136,11 @@ export function buildSimulatorApp(
           error:
             statusCode >= 500
               ? 'Internal Server Error'
-              : error.name,
+              : getErrorName(error),
           message:
             statusCode >= 500
               ? 'An unexpected simulator error occurred.'
-              : error.message,
+              : getErrorMessage(error),
         });
     }
   );

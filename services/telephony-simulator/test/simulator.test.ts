@@ -39,15 +39,20 @@ SessionManager {
       const session:
       SimulatorSessionDto = {
         id: randomUUID(),
+
         providerCallId:
           `sim-${randomUUID()}`,
+
         callSessionId:
           input.callSessionId,
+
         destinationNumber:
           input.destinationNumber,
+
         scenarioId:
           input.scenarioId ??
           'appointment-confirmed',
+
         status: 'RUNNING',
         lastEventType: null,
         failureReason: null,
@@ -64,8 +69,10 @@ SessionManager {
     },
 
     getById(id) {
-      return sessions.get(id) ??
-        null;
+      return (
+        sessions.get(id) ??
+        null
+      );
     },
 
     async cancel(id) {
@@ -78,12 +85,12 @@ SessionManager {
         );
       }
 
-      const cancelled = {
+      const cancelled:
+      SimulatorSessionDto = {
         ...session,
-        status:
-          'CANCELLED' as const,
+        status: 'CANCELLED',
         lastEventType:
-          'cancelled' as const,
+          'cancelled',
         updatedAt:
           new Date().toISOString(),
       };
@@ -102,16 +109,19 @@ SessionManager {
   };
 }
 
-test(
+void test(
   'simulator health is available',
+
   async (context) => {
     const app =
       buildSimulatorApp({
         serverOptions: {
           logger: false,
         },
+
         internalToken:
           'test-token',
+
         sessions:
           createSessionManagerStub(),
       });
@@ -125,6 +135,7 @@ test(
     const response =
       await app.inject({
         method: 'GET',
+
         url:
           '/internal/v1/health/live',
       });
@@ -136,16 +147,19 @@ test(
   }
 );
 
-test(
+void test(
   'simulator sessions require authorization',
+
   async (context) => {
     const app =
       buildSimulatorApp({
         serverOptions: {
           logger: false,
         },
+
         internalToken:
           'test-token',
+
         sessions:
           createSessionManagerStub(),
       });
@@ -159,15 +173,20 @@ test(
     const response =
       await app.inject({
         method: 'POST',
+
         url:
           '/internal/v1/sessions',
+
         payload: {
           callSessionId:
             randomUUID(),
+
           destinationNumber:
             '+919999999999',
+
           promptSnapshot:
             'Confirm an appointment.',
+
           languageCode:
             'en-IN',
         },
@@ -180,16 +199,19 @@ test(
   }
 );
 
-test(
+void test(
   'authorized simulator session lifecycle works',
+
   async (context) => {
     const app =
       buildSimulatorApp({
         serverOptions: {
           logger: false,
         },
+
         internalToken:
           'test-token',
+
         sessions:
           createSessionManagerStub(),
       });
@@ -203,21 +225,28 @@ test(
     const response =
       await app.inject({
         method: 'POST',
+
         url:
           '/internal/v1/sessions',
+
         headers: {
           authorization:
             'Bearer test-token',
         },
+
         payload: {
           callSessionId:
             randomUUID(),
+
           destinationNumber:
             '+919999999999',
+
           promptSnapshot:
             'Confirm an appointment.',
+
           languageCode:
             'en-IN',
+
           scenarioId:
             'appointment-confirmed',
         },
@@ -236,8 +265,10 @@ test(
     const cancelResponse =
       await app.inject({
         method: 'DELETE',
+
         url:
           `/internal/v1/sessions/${session.id}`,
+
         headers: {
           authorization:
             'Bearer test-token',

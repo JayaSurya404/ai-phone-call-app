@@ -6,6 +6,7 @@ export default tseslint.config(
     ignores: [
       'dist/**',
       'coverage/**',
+      'eslint.config.mjs',
     ],
   },
   eslint.configs.recommended,
@@ -15,7 +16,8 @@ export default tseslint.config(
     languageOptions: {
       parserOptions: {
         projectService: true,
-        tsconfigRootDir: import.meta.dirname,
+        tsconfigRootDir:
+          import.meta.dirname,
       },
     },
     rules: {
@@ -23,7 +25,8 @@ export default tseslint.config(
         'error',
         {
           prefer: 'type-imports',
-          fixStyle: 'separate-type-imports',
+          fixStyle:
+            'separate-type-imports',
         },
       ],
       '@typescript-eslint/no-misused-promises': [
@@ -32,6 +35,8 @@ export default tseslint.config(
           checksVoidReturn: false,
         },
       ],
+      '@typescript-eslint/require-await':
+        'off',
     },
   }
 );
