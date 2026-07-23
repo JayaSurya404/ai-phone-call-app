@@ -1,6 +1,10 @@
 import {
   CallStatus,
   SentimentLabel,
+} from '../../generated/prisma/client.ts';
+
+import type {
+  Prisma,
   TranscriptSpeaker,
 } from '../../generated/prisma/client.ts';
 
@@ -92,9 +96,13 @@ export interface FinalizeCallInput {
 }
 
 export interface CallSessionService {
-  list(limit: number): Promise<CallSessionListItemDto[]>;
+  list(
+    limit: number
+  ): Promise<CallSessionListItemDto[]>;
 
-  getById(id: string): Promise<CallSessionDto>;
+  getById(
+    id: string
+  ): Promise<CallSessionDto>;
 
   create(
     input: CreateCallSessionInput
@@ -120,28 +128,41 @@ export interface CallSessionService {
     input: FinalizeCallInput
   ): Promise<CallSessionDto>;
 
-  deleteDraft(id: string): Promise<void>;
+  deleteDraft(
+    id: string
+  ): Promise<void>;
 }
 
-export class CallSessionNotFoundError extends Error {
+export class CallSessionNotFoundError
+  extends Error {
   readonly statusCode = 404;
 
   constructor(id: string) {
-    super(`Call session ${id} was not found.`);
-    this.name = 'CallSessionNotFoundError';
+    super(
+      `Call session ${id} was not found.`
+    );
+
+    this.name =
+      'CallSessionNotFoundError';
   }
 }
 
-export class PromptTemplateNotFoundForCallError extends Error {
+export class PromptTemplateNotFoundForCallError
+  extends Error {
   readonly statusCode = 404;
 
   constructor(id: string) {
-    super(`Prompt template ${id} was not found.`);
-    this.name = 'PromptTemplateNotFoundForCallError';
+    super(
+      `Prompt template ${id} was not found.`
+    );
+
+    this.name =
+      'PromptTemplateNotFoundForCallError';
   }
 }
 
-export class InvalidCallTransitionError extends Error {
+export class InvalidCallTransitionError
+  extends Error {
   readonly statusCode = 409;
 
   constructor(
@@ -152,11 +173,13 @@ export class InvalidCallTransitionError extends Error {
       `Call status cannot change from ${currentStatus} to ${requestedStatus}.`
     );
 
-    this.name = 'InvalidCallTransitionError';
+    this.name =
+      'InvalidCallTransitionError';
   }
 }
 
-export class CallNotEditableError extends Error {
+export class CallNotEditableError
+  extends Error {
   readonly statusCode = 409;
 
   constructor(status: CallStatus) {
@@ -164,11 +187,13 @@ export class CallNotEditableError extends Error {
       `Only DRAFT call sessions can be edited. Current status: ${status}.`
     );
 
-    this.name = 'CallNotEditableError';
+    this.name =
+      'CallNotEditableError';
   }
 }
 
-export class CallNotDeletableError extends Error {
+export class CallNotDeletableError
+  extends Error {
   readonly statusCode = 409;
 
   constructor(status: CallStatus) {
@@ -176,11 +201,13 @@ export class CallNotDeletableError extends Error {
       `Only DRAFT call sessions can be deleted. Current status: ${status}.`
     );
 
-    this.name = 'CallNotDeletableError';
+    this.name =
+      'CallNotDeletableError';
   }
 }
 
-export class CallTranscriptNotAllowedError extends Error {
+export class CallTranscriptNotAllowedError
+  extends Error {
   readonly statusCode = 409;
 
   constructor(status: CallStatus) {
@@ -188,11 +215,13 @@ export class CallTranscriptNotAllowedError extends Error {
       `Transcript segments cannot be added while the call status is ${status}.`
     );
 
-    this.name = 'CallTranscriptNotAllowedError';
+    this.name =
+      'CallTranscriptNotAllowedError';
   }
 }
 
-export class CallFinalizeNotAllowedError extends Error {
+export class CallFinalizeNotAllowedError
+  extends Error {
   readonly statusCode = 409;
 
   constructor(status: CallStatus) {
@@ -200,11 +229,13 @@ export class CallFinalizeNotAllowedError extends Error {
       `Only an IN_PROGRESS call can be finalized. Current status: ${status}.`
     );
 
-    this.name = 'CallFinalizeNotAllowedError';
+    this.name =
+      'CallFinalizeNotAllowedError';
   }
 }
 
-export class CallPromptRequiredError extends Error {
+export class CallPromptRequiredError
+  extends Error {
   readonly statusCode = 400;
 
   constructor() {
@@ -212,7 +243,8 @@ export class CallPromptRequiredError extends Error {
       'A promptTemplateId or non-empty promptText is required.'
     );
 
-    this.name = 'CallPromptRequiredError';
+    this.name =
+      'CallPromptRequiredError';
   }
 }
 
@@ -285,7 +317,8 @@ interface CallRecord {
   failureReason: string | null;
   createdAt: Date;
   updatedAt: Date;
-  transcriptSegments: TranscriptRecord[];
+  transcriptSegments:
+    TranscriptRecord[];
 }
 
 function toTranscriptDto(
@@ -293,16 +326,20 @@ function toTranscriptDto(
 ): TranscriptSegmentDto {
   return {
     id: record.id,
-    callSessionId: record.callSessionId,
+    callSessionId:
+      record.callSessionId,
     sequence: record.sequence,
     speaker: record.speaker,
     content: record.content,
     confidence: record.confidence,
     sentiment: record.sentiment,
     latencyMs: record.latencyMs,
-    startedAtMs: record.startedAtMs,
+    startedAtMs:
+      record.startedAtMs,
     endedAtMs: record.endedAtMs,
-    createdAt: record.createdAt.toISOString(),
+
+    createdAt:
+      record.createdAt.toISOString(),
   };
 }
 
@@ -311,22 +348,50 @@ function toCallDto(
 ): CallSessionDto {
   return {
     id: record.id,
-    destinationNumber: record.destinationNumber,
-    promptSnapshot: record.promptSnapshot,
-    promptTemplateId: record.promptTemplateId,
+
+    destinationNumber:
+      record.destinationNumber,
+
+    promptSnapshot:
+      record.promptSnapshot,
+
+    promptTemplateId:
+      record.promptTemplateId,
+
     status: record.status,
-    languageCode: record.languageCode,
+
+    languageCode:
+      record.languageCode,
+
     provider: record.provider,
-    providerCallId: record.providerCallId,
-    startedAt: record.startedAt?.toISOString() ?? null,
-    endedAt: record.endedAt?.toISOString() ?? null,
+
+    providerCallId:
+      record.providerCallId,
+
+    startedAt:
+      record.startedAt?.toISOString() ??
+      null,
+
+    endedAt:
+      record.endedAt?.toISOString() ??
+      null,
+
     summary: record.summary,
     sentiment: record.sentiment,
-    failureReason: record.failureReason,
-    createdAt: record.createdAt.toISOString(),
-    updatedAt: record.updatedAt.toISOString(),
+
+    failureReason:
+      record.failureReason,
+
+    createdAt:
+      record.createdAt.toISOString(),
+
+    updatedAt:
+      record.updatedAt.toISOString(),
+
     transcriptSegments:
-      record.transcriptSegments.map(toTranscriptDto),
+      record.transcriptSegments.map(
+        toTranscriptDto
+      ),
   };
 }
 
@@ -358,13 +423,22 @@ function normalizeNullableText(
 
   const trimmed = value.trim();
 
-  return trimmed === '' ? null : trimmed;
+  return trimmed === ''
+    ? null
+    : trimmed;
 }
 
 async function resolvePrompt(
   prisma: VoiceNexusPrismaClient,
-  promptTemplateId: string | null | undefined,
-  promptText: string | undefined
+
+  promptTemplateId:
+    | string
+    | null
+    | undefined,
+
+  promptText:
+    | string
+    | undefined
 ): Promise<{
   promptTemplateId: string | null;
   promptSnapshot: string;
@@ -374,16 +448,17 @@ async function resolvePrompt(
 
   if (promptTemplateId) {
     const template =
-      await prisma.promptTemplate.findUnique({
-        where: {
-          id: promptTemplateId,
-        },
+      await prisma.promptTemplate
+        .findUnique({
+          where: {
+            id: promptTemplateId,
+          },
 
-        select: {
-          id: true,
-          promptText: true,
-        },
-      });
+          select: {
+            id: true,
+            promptText: true,
+          },
+        });
 
     if (!template) {
       throw new PromptTemplateNotFoundForCallError(
@@ -392,7 +467,8 @@ async function resolvePrompt(
     }
 
     return {
-      promptTemplateId: template.id,
+      promptTemplateId:
+        template.id,
 
       promptSnapshot:
         suppliedPrompt !== ''
@@ -418,22 +494,25 @@ export function createCallSessionService(
     id: string
   ): Promise<CallRecord> {
     const call =
-      await prisma.callSession.findUnique({
-        where: {
-          id,
-        },
+      await prisma.callSession
+        .findUnique({
+          where: {
+            id,
+          },
 
-        include: {
-          transcriptSegments: {
-            orderBy: {
-              sequence: 'asc',
+          include: {
+            transcriptSegments: {
+              orderBy: {
+                sequence: 'asc',
+              },
             },
           },
-        },
-      });
+        });
 
     if (!call) {
-      throw new CallSessionNotFoundError(id);
+      throw new CallSessionNotFoundError(
+        id
+      );
     }
 
     return call;
@@ -442,56 +521,80 @@ export function createCallSessionService(
   return {
     async list(
       limit: number
-    ): Promise<CallSessionListItemDto[]> {
+    ): Promise<
+      CallSessionListItemDto[]
+    > {
       const records =
-        await prisma.callSession.findMany({
-          take: limit,
+        await prisma.callSession
+          .findMany({
+            take: limit,
 
-          orderBy: {
-            createdAt: 'desc',
-          },
+            orderBy: {
+              createdAt: 'desc',
+            },
 
-          select: {
-            id: true,
-            destinationNumber: true,
-            status: true,
-            languageCode: true,
-            provider: true,
-            startedAt: true,
-            endedAt: true,
-            summary: true,
-            sentiment: true,
-            createdAt: true,
-            updatedAt: true,
-          },
-        });
+            select: {
+              id: true,
+              destinationNumber: true,
+              status: true,
+              languageCode: true,
+              provider: true,
+              startedAt: true,
+              endedAt: true,
+              summary: true,
+              sentiment: true,
+              createdAt: true,
+              updatedAt: true,
+            },
+          });
 
-      return records.map((record) => ({
-        id: record.id,
-        destinationNumber:
-          record.destinationNumber,
-        status: record.status,
-        languageCode: record.languageCode,
-        provider: record.provider,
-        startedAt:
-          record.startedAt?.toISOString() ??
-          null,
-        endedAt:
-          record.endedAt?.toISOString() ??
-          null,
-        summary: record.summary,
-        sentiment: record.sentiment,
-        createdAt:
-          record.createdAt.toISOString(),
-        updatedAt:
-          record.updatedAt.toISOString(),
-      }));
+      return records.map(
+        (record) => ({
+          id: record.id,
+
+          destinationNumber:
+            record.destinationNumber,
+
+          status: record.status,
+
+          languageCode:
+            record.languageCode,
+
+          provider:
+            record.provider,
+
+          startedAt:
+            record.startedAt
+              ?.toISOString() ??
+            null,
+
+          endedAt:
+            record.endedAt
+              ?.toISOString() ??
+            null,
+
+          summary: record.summary,
+
+          sentiment:
+            record.sentiment,
+
+          createdAt:
+            record.createdAt
+              .toISOString(),
+
+          updatedAt:
+            record.updatedAt
+              .toISOString(),
+        })
+      );
     },
 
     async getById(
       id: string
     ): Promise<CallSessionDto> {
-      return toCallDto(await findCall(id));
+      return toCallDto(
+        await findCall(id)
+      );
     },
 
     async create(
@@ -505,26 +608,31 @@ export function createCallSessionService(
         );
 
       const record =
-        await prisma.callSession.create({
-          data: {
-            destinationNumber:
-              input.destinationNumber.trim(),
+        await prisma.callSession
+          .create({
+            data: {
+              destinationNumber:
+                input.destinationNumber
+                  .trim(),
 
-            promptSnapshot:
-              resolvedPrompt.promptSnapshot,
+              promptSnapshot:
+                resolvedPrompt
+                  .promptSnapshot,
 
-            promptTemplateId:
-              resolvedPrompt.promptTemplateId,
+              promptTemplateId:
+                resolvedPrompt
+                  .promptTemplateId,
 
-            languageCode:
-              input.languageCode?.trim() ||
-              'en-IN',
-          },
+              languageCode:
+                input.languageCode
+                  ?.trim() ||
+                'en-IN',
+            },
 
-          include: {
-            transcriptSegments: true,
-          },
-        });
+            include: {
+              transcriptSegments: true,
+            },
+          });
 
       return toCallDto(record);
     },
@@ -534,24 +642,30 @@ export function createCallSessionService(
       input: UpdateDraftCallInput
     ): Promise<CallSessionDto> {
       const existing =
-        await prisma.callSession.findUnique({
-          where: {
-            id,
-          },
+        await prisma.callSession
+          .findUnique({
+            where: {
+              id,
+            },
 
-          select: {
-            id: true,
-            status: true,
-            promptTemplateId: true,
-            promptSnapshot: true,
-          },
-        });
+            select: {
+              id: true,
+              status: true,
+              promptTemplateId: true,
+              promptSnapshot: true,
+            },
+          });
 
       if (!existing) {
-        throw new CallSessionNotFoundError(id);
+        throw new CallSessionNotFoundError(
+          id
+        );
       }
 
-      if (existing.status !== CallStatus.DRAFT) {
+      if (
+        existing.status !==
+        CallStatus.DRAFT
+      ) {
         throw new CallNotEditableError(
           existing.status
         );
@@ -567,71 +681,86 @@ export function createCallSessionService(
         | undefined;
 
       if (
-        input.promptTemplateId !== undefined ||
-        input.promptText !== undefined
+        input.promptTemplateId !==
+          undefined ||
+        input.promptText !==
+          undefined
       ) {
         const resolvedPrompt =
           await resolvePrompt(
             prisma,
+
             input.promptTemplateId !==
             undefined
               ? input.promptTemplateId
-              : existing.promptTemplateId,
+              : existing
+                  .promptTemplateId,
+
             input.promptText
           );
 
         promptTemplateId =
-          resolvedPrompt.promptTemplateId;
+          resolvedPrompt
+            .promptTemplateId;
 
         promptSnapshot =
-          resolvedPrompt.promptSnapshot;
+          resolvedPrompt
+            .promptSnapshot;
       }
 
       try {
         const record =
-          await prisma.callSession.update({
-            where: {
-              id,
-            },
+          await prisma.callSession
+            .update({
+              where: {
+                id,
+              },
 
-            data: {
-              ...(input.destinationNumber !==
-              undefined
-                ? {
-                    destinationNumber:
-                      input.destinationNumber.trim(),
-                  }
-                : {}),
+              data: {
+                ...(input
+                  .destinationNumber !==
+                undefined
+                  ? {
+                      destinationNumber:
+                        input
+                          .destinationNumber
+                          .trim(),
+                    }
+                  : {}),
 
-              ...(input.languageCode !==
-              undefined
-                ? {
-                    languageCode:
-                      input.languageCode.trim(),
-                  }
-                : {}),
+                ...(input.languageCode !==
+                undefined
+                  ? {
+                      languageCode:
+                        input
+                          .languageCode
+                          .trim(),
+                    }
+                  : {}),
 
-              ...(promptTemplateId !== undefined
-                ? {
-                    promptTemplateId,
-                  }
-                : {}),
+                ...(promptTemplateId !==
+                undefined
+                  ? {
+                      promptTemplateId,
+                    }
+                  : {}),
 
-              ...(promptSnapshot !== undefined
-                ? {
-                    promptSnapshot,
-                  }
-                : {}),
-            },
+                ...(promptSnapshot !==
+                undefined
+                  ? {
+                      promptSnapshot,
+                    }
+                  : {}),
+              },
 
-            include: {
-              transcriptSegments: {
-                orderBy: {
-                  sequence: 'asc',
+              include: {
+                transcriptSegments: {
+                  orderBy: {
+                    sequence: 'asc',
+                  },
                 },
               },
-            },
-          });
+            });
 
         return toCallDto(record);
       } catch (error) {
@@ -639,7 +768,9 @@ export function createCallSessionService(
           getPrismaErrorCode(error) ===
           'P2025'
         ) {
-          throw new CallSessionNotFoundError(id);
+          throw new CallSessionNotFoundError(
+            id
+          );
         }
 
         throw error;
@@ -651,20 +782,23 @@ export function createCallSessionService(
       input: ChangeCallStatusInput
     ): Promise<CallSessionDto> {
       const existing =
-        await prisma.callSession.findUnique({
-          where: {
-            id,
-          },
+        await prisma.callSession
+          .findUnique({
+            where: {
+              id,
+            },
 
-          select: {
-            id: true,
-            status: true,
-            startedAt: true,
-          },
-        });
+            select: {
+              id: true,
+              status: true,
+              startedAt: true,
+            },
+          });
 
       if (!existing) {
-        throw new CallSessionNotFoundError(id);
+        throw new CallSessionNotFoundError(
+          id
+        );
       }
 
       if (
@@ -683,73 +817,87 @@ export function createCallSessionService(
       const terminalStatus =
         input.status ===
           CallStatus.COMPLETED ||
-        input.status === CallStatus.FAILED ||
+        input.status ===
+          CallStatus.FAILED ||
         input.status ===
           CallStatus.CANCELLED;
 
-      const record =
-        await prisma.callSession.update({
-          where: {
-            id,
-          },
+      const updateData:
+      Prisma.CallSessionUpdateInput = {
+        status: input.status,
+      };
 
-          data: {
-            status: input.status,
+      if (
+        input.provider !== undefined
+      ) {
+        const provider =
+          normalizeNullableText(
+            input.provider
+          );
 
-            ...(input.provider !== undefined
-              ? {
-                  provider:
-                    normalizeNullableText(
-                      input.provider
-                    ),
-                }
-              : {}),
+        if (provider !== undefined) {
+          updateData.provider =
+            provider;
+        }
+      }
 
-            ...(input.providerCallId !==
-            undefined
-              ? {
-                  providerCallId:
-                    normalizeNullableText(
-                      input.providerCallId
-                    ),
-                }
-              : {}),
+      if (
+        input.providerCallId !==
+        undefined
+      ) {
+        const providerCallId =
+          normalizeNullableText(
+            input.providerCallId
+          );
 
-            ...(input.failureReason !==
-            undefined
-              ? {
-                  failureReason:
-                    normalizeNullableText(
-                      input.failureReason
-                    ),
-                }
-              : {}),
+        if (
+          providerCallId !== undefined
+        ) {
+          updateData.providerCallId =
+            providerCallId;
+        }
+      }
 
-            ...(input.status ===
-              CallStatus.IN_PROGRESS &&
-            existing.startedAt === null
-              ? {
-                  startedAt: now,
-                }
-              : {}),
+      if (
+        input.failureReason !==
+        undefined
+      ) {
+        const failureReason =
+          normalizeNullableText(
+            input.failureReason
+          );
 
-            ...(terminalStatus
-              ? {
-                  endedAt: now,
-                }
-              : {}),
-          },
+        if (
+          failureReason !== undefined
+        ) {
+          updateData.failureReason =
+            failureReason;
+        }
+      }
 
-          include: {
-            transcriptSegments: {
-              orderBy: {
-                sequence: 'asc',
-              },
-            },
-          },
-        });
+      if (
+        input.status ===
+          CallStatus.IN_PROGRESS &&
+        existing.startedAt === null
+      ) {
+        updateData.startedAt = now;
+      }
 
-      return toCallDto(record);
+      if (terminalStatus) {
+        updateData.endedAt = now;
+      }
+
+      await prisma.callSession.update({
+        where: {
+          id,
+        },
+
+        data: updateData,
+      });
+
+      return toCallDto(
+        await findCall(id)
+      );
     },
 
     async addTranscriptSegment(
@@ -757,22 +905,26 @@ export function createCallSessionService(
       input: AddTranscriptSegmentInput
     ): Promise<TranscriptSegmentDto> {
       const call =
-        await prisma.callSession.findUnique({
-          where: {
-            id,
-          },
+        await prisma.callSession
+          .findUnique({
+            where: {
+              id,
+            },
 
-          select: {
-            status: true,
-          },
-        });
+            select: {
+              status: true,
+            },
+          });
 
       if (!call) {
-        throw new CallSessionNotFoundError(id);
+        throw new CallSessionNotFoundError(
+          id
+        );
       }
 
       if (
-        call.status !== CallStatus.RINGING &&
+        call.status !==
+          CallStatus.RINGING &&
         call.status !==
           CallStatus.IN_PROGRESS
       ) {
@@ -808,29 +960,36 @@ export function createCallSessionService(
                   callSessionId: id,
 
                   sequence:
-                    (latest?.sequence ?? 0) +
-                    1,
+                    (
+                      latest?.sequence ??
+                      0
+                    ) + 1,
 
-                  speaker: input.speaker,
+                  speaker:
+                    input.speaker,
 
                   content:
                     input.content.trim(),
 
                   confidence:
-                    input.confidence ?? null,
+                    input.confidence ??
+                    null,
 
                   sentiment:
                     input.sentiment ??
                     SentimentLabel.UNKNOWN,
 
                   latencyMs:
-                    input.latencyMs ?? null,
+                    input.latencyMs ??
+                    null,
 
                   startedAtMs:
-                    input.startedAtMs ?? null,
+                    input.startedAtMs ??
+                    null,
 
                   endedAtMs:
-                    input.endedAtMs ?? null,
+                    input.endedAtMs ??
+                    null,
                 },
               });
           }
@@ -844,18 +1003,21 @@ export function createCallSessionService(
       input: FinalizeCallInput
     ): Promise<CallSessionDto> {
       const existing =
-        await prisma.callSession.findUnique({
-          where: {
-            id,
-          },
+        await prisma.callSession
+          .findUnique({
+            where: {
+              id,
+            },
 
-          select: {
-            status: true,
-          },
-        });
+            select: {
+              status: true,
+            },
+          });
 
       if (!existing) {
-        throw new CallSessionNotFoundError(id);
+        throw new CallSessionNotFoundError(
+          id
+        );
       }
 
       if (
@@ -868,26 +1030,33 @@ export function createCallSessionService(
       }
 
       const record =
-        await prisma.callSession.update({
-          where: {
-            id,
-          },
+        await prisma.callSession
+          .update({
+            where: {
+              id,
+            },
 
-          data: {
-            status: CallStatus.COMPLETED,
-            summary: input.summary.trim(),
-            sentiment: input.sentiment,
-            endedAt: new Date(),
-          },
+            data: {
+              status:
+                CallStatus.COMPLETED,
 
-          include: {
-            transcriptSegments: {
-              orderBy: {
-                sequence: 'asc',
+              summary:
+                input.summary.trim(),
+
+              sentiment:
+                input.sentiment,
+
+              endedAt: new Date(),
+            },
+
+            include: {
+              transcriptSegments: {
+                orderBy: {
+                  sequence: 'asc',
+                },
               },
             },
-          },
-        });
+          });
 
       return toCallDto(record);
     },
@@ -896,21 +1065,27 @@ export function createCallSessionService(
       id: string
     ): Promise<void> {
       const existing =
-        await prisma.callSession.findUnique({
-          where: {
-            id,
-          },
+        await prisma.callSession
+          .findUnique({
+            where: {
+              id,
+            },
 
-          select: {
-            status: true,
-          },
-        });
+            select: {
+              status: true,
+            },
+          });
 
       if (!existing) {
-        throw new CallSessionNotFoundError(id);
+        throw new CallSessionNotFoundError(
+          id
+        );
       }
 
-      if (existing.status !== CallStatus.DRAFT) {
+      if (
+        existing.status !==
+        CallStatus.DRAFT
+      ) {
         throw new CallNotDeletableError(
           existing.status
         );

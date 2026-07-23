@@ -1,10 +1,14 @@
 import assert from 'node:assert/strict';
+
 import {
   randomUUID,
 } from 'node:crypto';
+
 import test from 'node:test';
 
-import { buildApp } from '../src/app.js';
+import {
+  buildApp,
+} from '../src/app.js';
 
 import {
   CallStatus,
@@ -54,7 +58,10 @@ DependencyManager {
 function createCallServiceStub():
 CallSessionService {
   const calls =
-    new Map<string, CallSessionDto>();
+    new Map<
+      string,
+      CallSessionDto
+    >();
 
   function requireCall(
     id: string
@@ -74,6 +81,7 @@ CallSessionService {
     call: CallSessionDto
   ): CallSessionDto {
     calls.set(call.id, call);
+
     return call;
   }
 
@@ -96,14 +104,17 @@ CallSessionService {
           languageCode:
             call.languageCode,
 
-          provider: call.provider,
+          provider:
+            call.provider,
 
           startedAt:
             call.startedAt,
 
-          endedAt: call.endedAt,
+          endedAt:
+            call.endedAt,
 
-          summary: call.summary,
+          summary:
+            call.summary,
 
           sentiment:
             call.sentiment,
@@ -116,7 +127,9 @@ CallSessionService {
         }));
     },
 
-    async getById(id) {
+    async getById(
+      id: string
+    ) {
       return requireCall(id);
     },
 
@@ -127,7 +140,8 @@ CallSessionService {
       const timestamp =
         new Date().toISOString();
 
-      const call: CallSessionDto = {
+      const call:
+      CallSessionDto = {
         id: randomUUID(),
 
         destinationNumber:
@@ -141,7 +155,8 @@ CallSessionService {
           input.promptTemplateId ??
           null,
 
-        status: CallStatus.DRAFT,
+        status:
+          CallStatus.DRAFT,
 
         languageCode:
           input.languageCode ??
@@ -157,8 +172,12 @@ CallSessionService {
           SentimentLabel.UNKNOWN,
 
         failureReason: null,
-        createdAt: timestamp,
-        updatedAt: timestamp,
+
+        createdAt:
+          timestamp,
+
+        updatedAt:
+          timestamp,
 
         transcriptSegments: [],
       };
@@ -168,10 +187,12 @@ CallSessionService {
 
     async updateDraft(
       id: string,
+
       input:
         UpdateDraftCallInput
     ) {
-      const call = requireCall(id);
+      const call =
+        requireCall(id);
 
       if (
         call.status !==
@@ -210,10 +231,12 @@ CallSessionService {
 
     async changeStatus(
       id: string,
+
       input:
         ChangeCallStatusInput
     ) {
-      const call = requireCall(id);
+      const call =
+        requireCall(id);
 
       const validTransitions:
       Record<
@@ -266,10 +289,19 @@ CallSessionService {
         );
       }
 
+      const isTerminalStatus =
+        input.status ===
+          CallStatus.COMPLETED ||
+        input.status ===
+          CallStatus.CANCELLED ||
+        input.status ===
+          CallStatus.FAILED;
+
       return updateStoredCall({
         ...call,
 
-        status: input.status,
+        status:
+          input.status,
 
         provider:
           input.provider !== undefined
@@ -290,16 +322,12 @@ CallSessionService {
 
         startedAt:
           input.status ===
-            CallStatus.IN_PROGRESS
+          CallStatus.IN_PROGRESS
             ? new Date().toISOString()
             : call.startedAt,
 
         endedAt:
-          [
-            CallStatus.COMPLETED,
-            CallStatus.CANCELLED,
-            CallStatus.FAILED,
-          ].includes(input.status)
+          isTerminalStatus
             ? new Date().toISOString()
             : call.endedAt,
 
@@ -310,10 +338,12 @@ CallSessionService {
 
     async addTranscriptSegment(
       id: string,
+
       input:
         AddTranscriptSegmentInput
     ): Promise<TranscriptSegmentDto> {
-      const call = requireCall(id);
+      const call =
+        requireCall(id);
 
       if (
         call.status !==
@@ -329,30 +359,39 @@ CallSessionService {
       const segment:
       TranscriptSegmentDto = {
         id: randomUUID(),
-        callSessionId: id,
+
+        callSessionId:
+          id,
 
         sequence:
           call.transcriptSegments
             .length + 1,
 
-        speaker: input.speaker,
-        content: input.content,
+        speaker:
+          input.speaker,
+
+        content:
+          input.content,
 
         confidence:
-          input.confidence ?? null,
+          input.confidence ??
+          null,
 
         sentiment:
           input.sentiment ??
           SentimentLabel.UNKNOWN,
 
         latencyMs:
-          input.latencyMs ?? null,
+          input.latencyMs ??
+          null,
 
         startedAtMs:
-          input.startedAtMs ?? null,
+          input.startedAtMs ??
+          null,
 
         endedAtMs:
-          input.endedAtMs ?? null,
+          input.endedAtMs ??
+          null,
 
         createdAt:
           new Date().toISOString(),
@@ -372,10 +411,12 @@ CallSessionService {
 
     async finalize(
       id: string,
+
       input:
         FinalizeCallInput
     ) {
-      const call = requireCall(id);
+      const call =
+        requireCall(id);
 
       if (
         call.status !==
@@ -388,20 +429,29 @@ CallSessionService {
 
       return updateStoredCall({
         ...call,
+
         status:
           CallStatus.COMPLETED,
-        summary: input.summary,
+
+        summary:
+          input.summary,
+
         sentiment:
           input.sentiment,
+
         endedAt:
           new Date().toISOString(),
+
         updatedAt:
           new Date().toISOString(),
       });
     },
 
-    async deleteDraft(id) {
-      const call = requireCall(id);
+    async deleteDraft(
+      id: string
+    ) {
+      const call =
+        requireCall(id);
 
       if (
         call.status !==
@@ -434,19 +484,25 @@ function createTestApp(
 
 test(
   'call lifecycle works from draft to completed',
-  async (context) => {
-    const app = createTestApp(
-      createCallServiceStub()
-    );
 
-    context.after(async () => {
-      await app.close();
-    });
+  async (context) => {
+    const app =
+      createTestApp(
+        createCallServiceStub()
+      );
+
+    context.after(
+      async () => {
+        await app.close();
+      }
+    );
 
     const createResponse =
       await app.inject({
         method: 'POST',
-        url: '/api/v1/calls',
+
+        url:
+          '/api/v1/calls',
 
         payload: {
           destinationNumber:
@@ -455,7 +511,8 @@ test(
           promptText:
             'Confirm the appointment.',
 
-          languageCode: 'en-IN',
+          languageCode:
+            'en-IN',
         },
       });
 
@@ -492,41 +549,59 @@ test(
       200
     );
 
-    await app.inject({
-      method: 'POST',
+    const starting =
+      await app.inject({
+        method: 'POST',
 
-      url:
-        `/api/v1/calls/${created.id}/status`,
+        url:
+          `/api/v1/calls/${created.id}/status`,
 
-      payload: {
-        status:
-          CallStatus.STARTING,
-      },
-    });
+        payload: {
+          status:
+            CallStatus.STARTING,
+        },
+      });
 
-    await app.inject({
-      method: 'POST',
+    assert.equal(
+      starting.statusCode,
+      200
+    );
 
-      url:
-        `/api/v1/calls/${created.id}/status`,
+    const ringing =
+      await app.inject({
+        method: 'POST',
 
-      payload: {
-        status:
-          CallStatus.RINGING,
-      },
-    });
+        url:
+          `/api/v1/calls/${created.id}/status`,
 
-    await app.inject({
-      method: 'POST',
+        payload: {
+          status:
+            CallStatus.RINGING,
+        },
+      });
 
-      url:
-        `/api/v1/calls/${created.id}/status`,
+    assert.equal(
+      ringing.statusCode,
+      200
+    );
 
-      payload: {
-        status:
-          CallStatus.IN_PROGRESS,
-      },
-    });
+    const inProgress =
+      await app.inject({
+        method: 'POST',
+
+        url:
+          `/api/v1/calls/${created.id}/status`,
+
+        payload: {
+          status:
+            CallStatus.IN_PROGRESS,
+        },
+      });
+
+    assert.equal(
+      inProgress.statusCode,
+      200
+    );
 
     const transcript =
       await app.inject({
@@ -584,7 +659,8 @@ test(
     );
 
     assert.equal(
-      completed.transcriptSegments
+      completed
+        .transcriptSegments
         .length,
       1
     );
@@ -593,20 +669,26 @@ test(
 
 test(
   'draft calls can be updated and deleted',
-  async (context) => {
-    const app = createTestApp(
-      createCallServiceStub()
-    );
 
-    context.after(async () => {
-      await app.close();
-    });
+  async (context) => {
+    const app =
+      createTestApp(
+        createCallServiceStub()
+      );
+
+    context.after(
+      async () => {
+        await app.close();
+      }
+    );
 
     const created =
       (
         await app.inject({
           method: 'POST',
-          url: '/api/v1/calls',
+
+          url:
+            '/api/v1/calls',
 
           payload: {
             destinationNumber:
@@ -640,8 +722,10 @@ test(
     );
 
     assert.equal(
-      updated.json<CallSessionDto>()
+      updated
+        .json<CallSessionDto>()
         .promptSnapshot,
+
       'Updated prompt.'
     );
 
@@ -662,20 +746,26 @@ test(
 
 test(
   'invalid call transitions return 409',
-  async (context) => {
-    const app = createTestApp(
-      createCallServiceStub()
-    );
 
-    context.after(async () => {
-      await app.close();
-    });
+  async (context) => {
+    const app =
+      createTestApp(
+        createCallServiceStub()
+      );
+
+    context.after(
+      async () => {
+        await app.close();
+      }
+    );
 
     const created =
       (
         await app.inject({
           method: 'POST',
-          url: '/api/v1/calls',
+
+          url:
+            '/api/v1/calls',
 
           payload: {
             destinationNumber:
@@ -709,20 +799,26 @@ test(
 
 test(
   'transcript cannot be added to a draft call',
-  async (context) => {
-    const app = createTestApp(
-      createCallServiceStub()
-    );
 
-    context.after(async () => {
-      await app.close();
-    });
+  async (context) => {
+    const app =
+      createTestApp(
+        createCallServiceStub()
+      );
+
+    context.after(
+      async () => {
+        await app.close();
+      }
+    );
 
     const created =
       (
         await app.inject({
           method: 'POST',
-          url: '/api/v1/calls',
+
+          url:
+            '/api/v1/calls',
 
           payload: {
             destinationNumber:
@@ -759,14 +855,18 @@ test(
 
 test(
   'missing calls return 404',
-  async (context) => {
-    const app = createTestApp(
-      createCallServiceStub()
-    );
 
-    context.after(async () => {
-      await app.close();
-    });
+  async (context) => {
+    const app =
+      createTestApp(
+        createCallServiceStub()
+      );
+
+    context.after(
+      async () => {
+        await app.close();
+      }
+    );
 
     const response =
       await app.inject({
