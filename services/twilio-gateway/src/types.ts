@@ -46,6 +46,16 @@ export interface ProviderEvent {
   reason?: string;
 }
 
+export type ProviderEventValues =
+  Omit<
+    ProviderEvent,
+    | 'eventId'
+    | 'sessionId'
+    | 'callSessionId'
+    | 'occurredAt'
+    | 'type'
+  >;
+
 export interface ConversationMessage {
   role:
     | 'user'
@@ -70,6 +80,8 @@ export interface ActiveGatewayCall {
   createdAt: string;
   connectedSent: boolean;
   completedSent: boolean;
+  lastCallerText?: string;
+  lastCallerAtMs?: number;
   timeout?: ReturnType<
     typeof setTimeout
   >;

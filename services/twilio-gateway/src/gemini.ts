@@ -17,7 +17,13 @@ interface GeminiResponse {
         text?: string;
       }>;
     };
+    finishReason?: string;
   }>;
+
+  promptFeedback?: {
+    blockReason?: string;
+  };
+
   error?: {
     message?: string;
   };
@@ -28,12 +34,18 @@ export async function generateGeminiReply(
     GeminiReplyOptions
 ): Promise<string> {
   const endpoint =
-    `https://generativelanguage.googleapis.com/v1beta/models/` +
-    `${encodeURIComponent(
-      options.model
-    )}:generateContent?key=${encodeURIComponent(
-      options.apiKey
-    )}`;
+    (
+      `https://generativelanguage.googleapis.com/` +
+      `v1beta/models/`
+    ) +
+    (
+      `${encodeURIComponent(
+        options.model
+      )}:generateContent?key=` +
+      encodeURIComponent(
+        options.apiKey
+      )
+    );
 
   const response =
     await fetch(
@@ -75,8 +87,9 @@ export async function generateGeminiReply(
                 ),
 
             generationConfig: {
-              temperature: 0.7,
-              maxOutputTokens: 160,
+              temperature: 0.65,
+              topP: 0.9,
+              maxOutputTokens: 180,
             },
           }),
       }
@@ -90,7 +103,21 @@ export async function generateGeminiReply(
   if (!response.ok) {
     throw new Error(
       body.error?.message ||
-      `Gemini returned HTTP ${response.status}.`
+      (
+        `Gemini returned HTTP ` +
+        `${response.status}.`
+      )
+    );
+  }
+
+  if (
+    body.promptFeedback
+      ?.blockReason
+  ) {
+    throw new Error(
+      `Gemini blocked the prompt: ` +
+      body.promptFeedback
+        .blockReason
     );
   }
 
@@ -105,8 +132,20 @@ export async function generateGeminiReply(
       .trim();
 
   if (!text) {
+    const finishReason =
+      body.candidates?.[0]
+        ?.finishReason;
+
     throw new Error(
-      'Gemini returned an empty response.'
+      finishReason
+        ? (
+            `Gemini returned no text. ` +
+            `Finish reason: ` +
+            finishReason
+          )
+        : (
+            'Gemini returned an empty response.'
+          )
     );
   }
 

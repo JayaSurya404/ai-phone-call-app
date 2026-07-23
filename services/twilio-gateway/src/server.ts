@@ -1,7 +1,3 @@
-import {
-  randomUUID,
-} from 'node:crypto';
-
 import formbody
   from '@fastify/formbody';
 
@@ -32,6 +28,8 @@ import {
 
 import type {
   ActiveGatewayCall,
+  ProviderEventType,
+  ProviderEventValues,
   StartCallInput,
 } from './types.js';
 
@@ -116,6 +114,75 @@ function getCall(
   return null;
 }
 
+function reportProviderEvent(
+  call: ActiveGatewayCall,
+  type: ProviderEventType,
+  values:
+    ProviderEventValues = {}
+): void {
+  void sendProviderEvent(
+    call,
+    type,
+    values
+  ).catch(
+    (error) => {
+      app.log.error(
+        {
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+
+          type,
+
+          callSessionId:
+            call.callSessionId,
+
+          providerCallId:
+            call.providerCallId,
+        },
+
+        'Provider callback delivery failed.'
+      );
+    }
+  );
+}
+
+function ensureConnected(
+  call: ActiveGatewayCall
+): void {
+  if (
+    call.connectedSent
+  ) {
+    return;
+  }
+
+  call.connectedSent = true;
+
+  reportProviderEvent(
+    call,
+    'connected'
+  );
+
+  reportProviderEvent(
+    call,
+    'transcript',
+    {
+      speaker:
+        'AI_AGENT',
+
+      content:
+        environment
+          .welcomeGreeting,
+
+      sentiment:
+        'NEUTRAL',
+
+      latencyMs: 0,
+    }
+  );
+}
+
 function summaryFor(
   call: ActiveGatewayCall
 ): string {
@@ -143,7 +210,7 @@ function summaryFor(
   }
 
   return (
-    `The AI phone call completed with ` +
+    `The real AI phone call completed with ` +
     `${userTurns} caller message` +
     `${userTurns === 1 ? '' : 's'} and ` +
     `${aiTurns} AI response` +
@@ -168,30 +235,49 @@ async function completeCall(
     );
   }
 
-  await sendProviderEvent(
-    call,
-    'completed',
-    {
-      summary:
-        summaryFor(call),
+  try {
+    await sendProviderEvent(
+      call,
+      'completed',
+      {
+        summary:
+          summaryFor(call),
 
-      sentiment:
-        'NEUTRAL',
-    }
-  );
+        sentiment:
+          'NEUTRAL',
+      }
+    );
+  } catch (error) {
+    app.log.error(
+      {
+        error:
+          error instanceof Error
+            ? error.message
+            : String(error),
+
+        callSessionId:
+          call.callSessionId,
+      },
+
+      'Final callback delivery failed.'
+    );
+  }
 }
 
 function sendText(
   socket: WebSocket,
-  text: string,
-  language: string
+  text: string
 ): void {
   socket.send(
     JSON.stringify({
       type: 'text',
       token: text,
       last: true,
-      lang: language,
+
+      // ElevenLabs detects the
+      // response language.
+      lang: 'multi',
+
       interruptible: true,
       preemptible: true,
     })
@@ -219,23 +305,259 @@ function validStartInput(
       'string' &&
     input.callSessionId.trim() !==
       '' &&
+
     typeof input.destinationNumber ===
       'string' &&
     input.destinationNumber.trim() !==
       '' &&
+
     typeof input.promptSnapshot ===
       'string' &&
     input.promptSnapshot.trim() !==
       '' &&
+
     typeof input.languageCode ===
       'string' &&
+
     typeof input.callback ===
       'object' &&
     input.callback !== null &&
+
     typeof input.callback.url ===
       'string' &&
+
     typeof input.callback.signingSecret ===
       'string'
+  );
+}
+
+function agentSystemPrompt(
+  call: ActiveGatewayCall
+): string {
+  return [
+    call.promptSnapshot,
+
+    '',
+
+    'You are VoiceNexus, an AI voice agent speaking during a real telephone call.',
+
+    'Follow the requested business purpose and move the call toward a clear outcome.',
+
+    'Sound warm, calm, confident, and conversational, but never pretend to be a human.',
+
+    'Use short natural spoken sentences. Usually answer in one or two sentences.',
+
+    'Acknowledge what the caller said before asking the next useful question.',
+
+    'Ask only one question at a time.',
+
+    'Never use markdown, bullet points, emojis, headings, stage directions, or URLs.',
+
+    'Avoid repeating the same greeting or repeating the caller word for word.',
+
+    'Automatically understand the caller language and reply in that same language.',
+
+    'Support natural code-switching between English and Indian languages when the caller does it.',
+
+    'For Tamil, Hindi, or another language, write the response in that language so multilingual TTS speaks it correctly.',
+
+    'If audio is unclear, politely ask one short clarification question.',
+
+    'When the task is complete, confirm the result and close the call politely.',
+  ].join('\n');
+}
+
+async function handleCallerPrompt(
+  socket: WebSocket,
+  call: ActiveGatewayCall,
+  callerText: string
+): Promise<void> {
+  const now =
+    Date.now();
+
+  if (
+    call.lastCallerText ===
+      callerText &&
+    call.lastCallerAtMs !==
+      undefined &&
+    now -
+      call.lastCallerAtMs <
+      1_500
+  ) {
+    app.log.info(
+      {
+        callSessionId:
+          call.callSessionId,
+        callerText,
+      },
+
+      'Duplicate final prompt ignored.'
+    );
+
+    return;
+  }
+
+  call.lastCallerText =
+    callerText;
+
+  call.lastCallerAtMs =
+    now;
+
+  const startedAt =
+    Date.now();
+
+  call.history.push({
+    role: 'user',
+    text:
+      callerText,
+  });
+
+  call.transcript.push({
+    speaker:
+      'REMOTE_PARTY',
+
+    content:
+      callerText,
+  });
+
+  // Never block Gemini on the
+  // dashboard callback.
+  reportProviderEvent(
+    call,
+    'transcript',
+    {
+      speaker:
+        'REMOTE_PARTY',
+
+      content:
+        callerText,
+
+      confidence:
+        null,
+
+      sentiment:
+        'NEUTRAL',
+
+      latencyMs:
+        null,
+    }
+  );
+
+  app.log.info(
+    {
+      callSessionId:
+        call.callSessionId,
+
+      callerText,
+    },
+
+    'Final caller prompt received.'
+  );
+
+  let responseText:
+    string;
+
+  try {
+    responseText =
+      await generateGeminiReply({
+        apiKey:
+          environment
+            .geminiApiKey,
+
+        model:
+          environment
+            .geminiModel,
+
+        systemPrompt:
+          agentSystemPrompt(
+            call
+          ),
+
+        history:
+          call.history
+            .slice(-16),
+      });
+  } catch (error) {
+    app.log.error(
+      {
+        error:
+          error instanceof Error
+            ? error.message
+            : String(error),
+
+        callSessionId:
+          call.callSessionId,
+
+        model:
+          environment
+            .geminiModel,
+      },
+
+      'Gemini response failed.'
+    );
+
+    responseText =
+      (
+        'Sorry, I had a brief AI connection issue. ' +
+        'Please say that once more.'
+      );
+  }
+
+  const latency =
+    Date.now() -
+    startedAt;
+
+  // Speak first. Monitoring must
+  // never delay the live call.
+  sendText(
+    socket,
+    responseText
+  );
+
+  call.history.push({
+    role: 'model',
+    text:
+      responseText,
+  });
+
+  call.transcript.push({
+    speaker:
+      'AI_AGENT',
+
+    content:
+      responseText,
+  });
+
+  reportProviderEvent(
+    call,
+    'transcript',
+    {
+      speaker:
+        'AI_AGENT',
+
+      content:
+        responseText,
+
+      sentiment:
+        'NEUTRAL',
+
+      latencyMs:
+        latency,
+    }
+  );
+
+  app.log.info(
+    {
+      callSessionId:
+        call.callSessionId,
+
+      latencyMs:
+        latency,
+
+      responseText,
+    },
+
+    'AI response sent to Twilio.'
   );
 }
 
@@ -243,11 +565,102 @@ app.get(
   '/health',
   async () => ({
     status: 'ok',
+
     service:
       'voicenexus-twilio-gateway',
+
     provider:
       'twilio-conversation-relay',
+
+    languageMode:
+      'automatic-multilingual',
+
+    geminiModel:
+      environment
+        .geminiModel,
   })
+);
+
+app.get(
+  '/v1/diagnostics',
+
+  async (
+    request,
+    reply
+  ) => {
+    if (
+      !authorizationValid(
+        request.headers
+          .authorization
+      )
+    ) {
+      return reply
+        .code(401)
+        .send({
+          message:
+            'Unauthorized.',
+        });
+    }
+
+    try {
+      const geminiReply =
+        await generateGeminiReply({
+          apiKey:
+            environment
+              .geminiApiKey,
+
+          model:
+            environment
+              .geminiModel,
+
+          systemPrompt:
+            (
+              'This is a connectivity test. ' +
+              'Reply with READY only.'
+            ),
+
+          history: [
+            {
+              role: 'user',
+              text: 'Test now.',
+            },
+          ],
+        });
+
+      return {
+        status: 'ready',
+
+        twilioConfigured:
+          environment
+            .twilioAccountSid
+            .startsWith('AC'),
+
+        gemini: {
+          model:
+            environment
+              .geminiModel,
+
+          response:
+            geminiReply,
+        },
+
+        languageMode:
+          'multi',
+      };
+    } catch (error) {
+      return reply
+        .code(502)
+        .send({
+          status:
+            'not-ready',
+
+          message:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        });
+    }
+  }
 );
 
 app.post<{
@@ -290,22 +703,28 @@ app.post<{
       request.body;
 
     const statusCallbackUrl =
-      `${environment.publicBaseUrl}` +
-      `/twilio/status?callSessionId=` +
+      (
+        `${environment.publicBaseUrl}` +
+        `/twilio/status?callSessionId=`
+      ) +
       encodeURIComponent(
         input.callSessionId
       );
 
     const actionUrl =
-      `${environment.publicBaseUrl}` +
-      `/twilio/connect-action?callSessionId=` +
+      (
+        `${environment.publicBaseUrl}` +
+        `/twilio/connect-action?callSessionId=`
+      ) +
       encodeURIComponent(
         input.callSessionId
       );
 
     const conversationUrl =
-      `${environment.publicWebSocketUrl}` +
-      `/twilio/conversation`;
+      (
+        `${environment.publicWebSocketUrl}` +
+        `/twilio/conversation`
+      );
 
     const twiml =
       buildConversationRelayTwiml({
@@ -318,10 +737,6 @@ app.post<{
         welcomeGreeting:
           environment
             .welcomeGreeting,
-
-        language:
-          environment
-            .conversationLanguage,
 
         actionUrl,
       });
@@ -374,7 +789,7 @@ app.post<{
               .promptSnapshot,
 
           languageCode:
-            input.languageCode,
+            'multi',
 
           callback:
             input.callback,
@@ -418,11 +833,13 @@ app.post<{
                 (error) => {
                   app.log.error(
                     error,
+
                     'Failed to enforce call time limit.'
                   );
                 }
               );
           },
+
           environment
             .maxCallSeconds *
           1000
@@ -438,6 +855,21 @@ app.post<{
         state
       );
 
+      app.log.info(
+        {
+          callSessionId:
+            state.callSessionId,
+
+          providerCallId:
+            state.providerCallId,
+
+          destinationNumber:
+            state.destinationNumber,
+        },
+
+        'Real Twilio call created.'
+      );
+
       return reply
         .code(201)
         .send({
@@ -450,6 +882,7 @@ app.post<{
     } catch (error) {
       app.log.error(
         error,
+
         'Twilio outbound call failed.'
       );
 
@@ -459,7 +892,10 @@ app.post<{
           message:
             error instanceof Error
               ? error.message
-              : 'Twilio could not create the outbound call.',
+              : (
+                  'Twilio could not create ' +
+                  'the outbound call.'
+                ),
         });
     }
   }
@@ -506,7 +942,7 @@ app.delete<{
         });
 
       if (call) {
-        await sendProviderEvent(
+        reportProviderEvent(
           call,
           'cancelled',
           {
@@ -522,6 +958,7 @@ app.delete<{
     } catch (error) {
       app.log.error(
         error,
+
         'Twilio cancellation failed.'
       );
 
@@ -531,7 +968,10 @@ app.delete<{
           message:
             error instanceof Error
               ? error.message
-              : 'Twilio could not cancel the call.',
+              : (
+                  'Twilio could not cancel ' +
+                  'the call.'
+                ),
         });
     }
   }
@@ -542,6 +982,7 @@ app.post<{
     callSessionId?:
       string;
   };
+
   Body: Record<
     string,
     string | undefined
@@ -573,6 +1014,7 @@ app.post<{
           callSid,
           callStatus,
         },
+
         'Status callback arrived before gateway state was available.'
       );
 
@@ -584,40 +1026,16 @@ app.post<{
     try {
       switch (callStatus) {
         case 'ringing':
-          await sendProviderEvent(
+          reportProviderEvent(
             call,
             'ringing'
           );
           break;
 
         case 'in-progress':
-          if (
-            !call.connectedSent
-          ) {
-            call.connectedSent =
-              true;
-
-            await sendProviderEvent(
-              call,
-              'connected'
-            );
-
-            await sendProviderEvent(
-              call,
-              'transcript',
-              {
-                speaker:
-                  'AI_AGENT',
-
-                content:
-                  environment
-                    .welcomeGreeting,
-
-                sentiment:
-                  'NEUTRAL',
-              }
-            );
-          }
+          ensureConnected(
+            call
+          );
           break;
 
         case 'completed':
@@ -627,7 +1045,7 @@ app.post<{
           break;
 
         case 'canceled':
-          await sendProviderEvent(
+          reportProviderEvent(
             call,
             'cancelled',
             {
@@ -640,7 +1058,7 @@ app.post<{
         case 'busy':
         case 'failed':
         case 'no-answer':
-          await sendProviderEvent(
+          reportProviderEvent(
             call,
             'failed',
             {
@@ -656,6 +1074,7 @@ app.post<{
     } catch (error) {
       app.log.error(
         error,
+
         'Failed to forward Twilio status.'
       );
     }
@@ -676,13 +1095,17 @@ app.post(
     return reply
       .type('text/xml')
       .send(
-        '<?xml version="1.0" encoding="UTF-8"?><Response><Hangup /></Response>'
+        (
+          '<?xml version="1.0" encoding="UTF-8"?>' +
+          '<Response><Hangup /></Response>'
+        )
       );
   }
 );
 
 app.get(
   '/twilio/conversation',
+
   {
     websocket: true,
   },
@@ -709,7 +1132,10 @@ app.get(
 
           signature,
 
-          `${environment.publicWebSocketUrl}${request.url}`,
+          (
+            `${environment.publicWebSocketUrl}` +
+            request.url
+          ),
 
           {}
         );
@@ -746,16 +1172,45 @@ app.get(
                     type?: string;
                     sessionId?: string;
                     callSid?: string;
+
                     customParameters?: {
                       callSessionId?:
                         string;
                     };
+
                     voicePrompt?:
                       string;
+
                     lang?: string;
                     last?: boolean;
-                    description?: string;
+
+                    utteranceUntilInterrupt?:
+                      string;
+
+                    durationUntilInterruptMs?:
+                      number;
+
+                    description?:
+                      string;
                   };
+
+                app.log.debug(
+                  {
+                    type:
+                      message.type,
+
+                    callSid:
+                      message.callSid,
+
+                    lang:
+                      message.lang,
+
+                    last:
+                      message.last,
+                  },
+
+                  'ConversationRelay message received.'
+                );
 
                 if (
                   message.type ===
@@ -779,12 +1234,30 @@ app.get(
                     return;
                   }
 
+                  ensureConnected(
+                    activeCall
+                  );
+
+                  app.log.info(
+                    {
+                      callSessionId:
+                        activeCall
+                          .callSessionId,
+
+                      providerCallId:
+                        activeCall
+                          .providerCallId,
+                    },
+
+                    'ConversationRelay setup completed.'
+                  );
+
                   return;
                 }
 
                 if (
                   message.type ===
-                    'prompt' &&
+                  'prompt' &&
                   message.last ===
                     true &&
                   activeCall
@@ -797,147 +1270,36 @@ app.get(
                     return;
                   }
 
-                  const startedAt =
-                    Date.now();
-
-                  activeCall
-                    .history
-                    .push({
-                      role: 'user',
-                      text:
-                        callerText,
-                    });
-
-                  activeCall
-                    .transcript
-                    .push({
-                      speaker:
-                        'REMOTE_PARTY',
-
-                      content:
-                        callerText,
-                    });
-
-                  await sendProviderEvent(
+                  await handleCallerPrompt(
+                    socket,
                     activeCall,
-                    'transcript',
-                    {
-                      speaker:
-                        'REMOTE_PARTY',
-
-                      content:
-                        callerText,
-
-                      confidence:
-                        null,
-
-                      sentiment:
-                        'NEUTRAL',
-
-                      latencyMs:
-                        null,
-                    }
+                    callerText
                   );
 
-                  try {
-                    const response =
-                      await generateGeminiReply({
-                        apiKey:
-                          environment
-                            .geminiApiKey,
+                  return;
+                }
 
-                        model:
-                          environment
-                            .geminiModel,
+                if (
+                  message.type ===
+                  'interrupt'
+                ) {
+                  app.log.info(
+                    {
+                      callSessionId:
+                        activeCall
+                          ?.callSessionId,
 
-                        systemPrompt:
-                          [
-                            activeCall
-                              .promptSnapshot,
+                      spokenBeforeInterrupt:
+                        message
+                          .utteranceUntilInterrupt,
 
-                            'You are speaking during a real phone call.',
+                      durationMs:
+                        message
+                          .durationUntilInterruptMs,
+                    },
 
-                            'Speak naturally, warmly, and briefly.',
-
-                            'Use one to three short sentences.',
-
-                            'Do not use markdown, bullet points, emojis, or stage directions.',
-
-                            'Never claim to be human. Clearly remain an AI assistant.',
-                          ].join(
-                            '\n'
-                          ),
-
-                        history:
-                          activeCall
-                            .history
-                            .slice(-12),
-                      });
-
-                    activeCall
-                      .history
-                      .push({
-                        role: 'model',
-                        text:
-                          response,
-                      });
-
-                    activeCall
-                      .transcript
-                      .push({
-                        speaker:
-                          'AI_AGENT',
-
-                        content:
-                          response,
-                      });
-
-                    const latency =
-                      Date.now() -
-                      startedAt;
-
-                    await sendProviderEvent(
-                      activeCall,
-                      'transcript',
-                      {
-                        speaker:
-                          'AI_AGENT',
-
-                        content:
-                          response,
-
-                        sentiment:
-                          'NEUTRAL',
-
-                        latencyMs:
-                          latency,
-                      }
-                    );
-
-                    sendText(
-                      socket,
-                      response,
-                      message.lang ||
-                      environment
-                        .conversationLanguage
-                    );
-                  } catch (error) {
-                    app.log.error(
-                      error,
-                      'Gemini response failed.'
-                    );
-
-                    const fallback =
-                      'Sorry, I had a brief connection issue. Please say that again.';
-
-                    sendText(
-                      socket,
-                      fallback,
-                      message.lang ||
-                      environment
-                        .conversationLanguage
-                    );
-                  }
+                    'Caller interrupted AI speech.'
+                  );
 
                   return;
                 }
@@ -951,7 +1313,12 @@ app.get(
                       description:
                         message
                           .description,
+
+                      callSessionId:
+                        activeCall
+                          ?.callSessionId,
                     },
+
                     'ConversationRelay error.'
                   );
                 }
@@ -960,7 +1327,17 @@ app.get(
             .catch(
               (error) => {
                 app.log.error(
-                  error,
+                  {
+                    error:
+                      error instanceof Error
+                        ? error.message
+                        : String(error),
+
+                    callSessionId:
+                      activeCall
+                        ?.callSessionId,
+                  },
+
                   'Conversation message failed.'
                 );
               }
@@ -979,6 +1356,7 @@ app.get(
                 activeCall
                   .callSessionId,
             },
+
             'ConversationRelay socket closed.'
           );
         }
@@ -1007,9 +1385,17 @@ app.log.info(
     provider:
       'twilio-conversation-relay',
 
+    languageMode:
+      'automatic-multilingual',
+
+    geminiModel:
+      environment
+        .geminiModel,
+
     maxCallSeconds:
       environment
         .maxCallSeconds,
   },
+
   'VoiceNexus Twilio gateway started.'
 );
