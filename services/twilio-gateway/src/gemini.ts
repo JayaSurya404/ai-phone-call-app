@@ -1,13 +1,17 @@
 import type {
   ConversationMessage,
-  SupportedLanguage,
 } from './types.js';
+
+import type {
+  LanguageProfile,
+} from './language-profiles.js';
 
 export interface GeminiReplyOptions {
   apiKey: string;
   model: string;
   systemPrompt: string;
-  history: ConversationMessage[];
+  history:
+    ConversationMessage[];
   timeoutMs?: number;
 }
 
@@ -20,126 +24,258 @@ interface GeminiResponse {
     };
     finishReason?: string;
   }>;
+
   promptFeedback?: {
     blockReason?: string;
   };
+
   error?: {
     message?: string;
   };
 }
 
-function spokenText(value: string): string {
+function spokenText(
+  value: string
+): string {
   return value
-    .replaceAll(/```[\s\S]*?```/gu, ' ')
-    .replaceAll(/[*_#>`~]/gu, '')
-    .replaceAll(/\s+/gu, ' ')
-    .replaceAll(/^["']|["']$/gu, '')
+    .replaceAll(
+      /```[\s\S]*?```/gu,
+      ' '
+    )
+    .replaceAll(
+      /[*_#>`~]/gu,
+      ''
+    )
+    .replaceAll(
+      /\s+/gu,
+      ' '
+    )
+    .replaceAll(
+      /^["']|["']$/gu,
+      ''
+    )
     .trim();
 }
 
 export async function generateGeminiReply(
-  options: GeminiReplyOptions,
+  options:
+    GeminiReplyOptions
 ): Promise<string> {
   const endpoint =
-    `https://generativelanguage.googleapis.com/v1beta/models/` +
-    `${encodeURIComponent(options.model)}:generateContent?key=` +
-    encodeURIComponent(options.apiKey);
+    (
+      'https://generativelanguage.googleapis.com/' +
+      'v1beta/models/'
+    ) +
+    (
+      `${encodeURIComponent(
+        options.model
+      )}:generateContent?key=` +
+      encodeURIComponent(
+        options.apiKey
+      )
+    );
 
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), options.timeoutMs ?? 10_000);
+  const controller =
+    new AbortController();
+
+  const timeout =
+    setTimeout(
+      () => {
+        controller.abort();
+      },
+      options.timeoutMs ??
+      10_000
+    );
 
   try {
-    const response = await fetch(endpoint, {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-      },
-      signal: controller.signal,
-      body: JSON.stringify({
-        systemInstruction: {
-          parts: [{ text: options.systemPrompt }],
-        },
-        contents: options.history.map((message) => ({
-          role: message.role,
-          parts: [{ text: message.text }],
-        })),
-        generationConfig: {
-          temperature: 1,
-          topP: 0.9,
-          maxOutputTokens: 180,
-          thinkingConfig: {
-            thinkingLevel: 'minimal',
-          },
-        },
-      }),
-    });
+    const response =
+      await fetch(
+        endpoint,
+        {
+          method: 'POST',
 
-    const body = (await response.json()) as GeminiResponse;
+          headers: {
+            'content-type':
+              'application/json',
+          },
+
+          signal:
+            controller.signal,
+
+          body:
+            JSON.stringify({
+              systemInstruction: {
+                parts: [
+                  {
+                    text:
+                      options
+                        .systemPrompt,
+                  },
+                ],
+              },
+
+              contents:
+                options.history
+                  .map(
+                    (message) => ({
+                      role:
+                        message.role,
+
+                      parts: [
+                        {
+                          text:
+                            message.text,
+                        },
+                      ],
+                    })
+                  ),
+
+              generationConfig: {
+                temperature: 0.9,
+                topP: 0.9,
+                maxOutputTokens: 180,
+
+                thinkingConfig: {
+                  thinkingLevel:
+                    'minimal',
+                },
+              },
+            }),
+        }
+      );
+
+    const body =
+      await response
+        .json() as
+        GeminiResponse;
 
     if (!response.ok) {
       throw new Error(
-        body.error?.message || `Gemini returned HTTP ${response.status}.`,
+        body.error?.message ||
+        (
+          `Gemini returned HTTP ` +
+          `${response.status}.`
+        )
       );
     }
 
-    if (body.promptFeedback?.blockReason) {
-      throw new Error(`Gemini blocked the prompt: ${body.promptFeedback.blockReason}`);
+    if (
+      body.promptFeedback
+        ?.blockReason
+    ) {
+      throw new Error(
+        (
+          'Gemini blocked the prompt: ' +
+          body.promptFeedback
+            .blockReason
+        )
+      );
     }
 
-    const text = spokenText(
-      body.candidates?.[0]?.content?.parts
-        ?.map((part) => part.text ?? '')
-        .join('') ?? '',
-    );
+    const text =
+      spokenText(
+        body.candidates?.[0]
+          ?.content?.parts
+          ?.map(
+            (part) =>
+              part.text ?? ''
+          )
+          .join('') ??
+        ''
+      );
 
     if (!text) {
-      const finishReason = body.candidates?.[0]?.finishReason;
+      const finishReason =
+        body.candidates?.[0]
+          ?.finishReason;
+
       throw new Error(
         finishReason
-          ? `Gemini returned no text. Finish reason: ${finishReason}`
-          : 'Gemini returned an empty response.',
+          ? (
+              'Gemini returned no text. ' +
+              `Finish reason: ${finishReason}`
+            )
+          : (
+              'Gemini returned an empty response.'
+            )
       );
     }
 
     return text;
   } finally {
-    clearTimeout(timeout);
+    clearTimeout(
+      timeout
+    );
   }
 }
 
-export async function generateOpeningGreeting(options: {
-  apiKey: string;
-  model: string;
-  callPurpose: string;
-  language: SupportedLanguage | 'multi';
-  fallback: string;
-}): Promise<string> {
-  const languageInstruction =
-    options.language === 'ta-IN'
-      ? 'Write the greeting in natural spoken Tamil.'
-      : options.language === 'hi-IN'
-        ? 'Write the greeting in natural spoken Hindi.'
-        : 'Write the greeting in concise Indian English.';
-
+export async function generateOpeningGreeting(
+  options: {
+    apiKey: string;
+    model: string;
+    callPurpose: string;
+    profile:
+      LanguageProfile;
+  }
+): Promise<string> {
   try {
-    const greeting = await generateGeminiReply({
-      apiKey: options.apiKey,
-      model: options.model,
-      timeoutMs: 8_000,
-      systemPrompt: [
-        'Create the opening line for a real outbound telephone call.',
-        'The line must disclose once that the caller is an AI assistant.',
-        'State the specific purpose naturally and ask one useful opening question.',
-        'Do not say that the recipient can speak in a preferred language.',
-        'Do not use a generic chatbot greeting.',
-        'Use no more than thirty spoken words.',
-        languageInstruction,
-      ].join('\n'),
-      history: [{ role: 'user', text: options.callPurpose }],
-    });
+    return await generateGeminiReply({
+      apiKey:
+        options.apiKey,
 
-    return greeting.slice(0, 300);
+      model:
+        options.model,
+
+      timeoutMs: 8_000,
+
+      systemPrompt: [
+        (
+          'Create the opening for a real outbound telephone call.'
+        ),
+
+        (
+          'Disclose once that the caller is an AI assistant.'
+        ),
+
+        (
+          'State the actual purpose naturally and ask exactly one ' +
+          'useful opening question.'
+        ),
+
+        (
+          'Use no more than two short spoken sentences.'
+        ),
+
+        (
+          'Do not say "preferred language", "language selection", ' +
+          'or anything that sounds like a chatbot menu.'
+        ),
+
+        (
+          `Speak in ${options.profile.llmLanguageName}.`
+        ),
+
+        options.profile
+          .llmInstruction,
+
+        (
+          'Use no markdown, list, heading, emoji, or stage direction.'
+        ),
+      ].join('\n'),
+
+      history: [
+        {
+          role: 'user',
+
+          text:
+            options.callPurpose,
+        },
+      ],
+    });
   } catch {
-    return options.fallback;
+    return (
+      'Hello, this is VoiceNexus, an AI assistant calling ' +
+      'regarding your request. Is now a good time to talk?'
+    );
   }
 }

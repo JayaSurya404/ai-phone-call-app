@@ -1,12 +1,3 @@
-export type SupportedLanguage =
-  | 'en-IN'
-  | 'ta-IN'
-  | 'hi-IN';
-
-export type LanguageMode =
-  | SupportedLanguage
-  | 'multi';
-
 export interface ProviderCallback {
   url: string;
   signingSecret: string;
@@ -41,31 +32,34 @@ export interface ProviderEvent {
   type: ProviderEventType;
   speaker?: TranscriptSpeaker;
   content?: string;
-  confidence?: number | null;
+  confidence?: number;
   sentiment?:
     | 'UNKNOWN'
     | 'NEUTRAL'
     | 'POSITIVE'
     | 'NEGATIVE'
     | 'MIXED';
-  latencyMs?: number | null;
-  startedAtMs?: number | null;
-  endedAtMs?: number | null;
+  latencyMs?: number;
+  startedAtMs?: number;
+  endedAtMs?: number;
   summary?: string;
   reason?: string;
 }
 
-export type ProviderEventValues = Omit<
-  ProviderEvent,
-  | 'eventId'
-  | 'sessionId'
-  | 'callSessionId'
-  | 'occurredAt'
-  | 'type'
->;
+export type ProviderEventValues =
+  Omit<
+    ProviderEvent,
+    | 'eventId'
+    | 'sessionId'
+    | 'callSessionId'
+    | 'occurredAt'
+    | 'type'
+  >;
 
 export interface ConversationMessage {
-  role: 'user' | 'model';
+  role:
+    | 'user'
+    | 'model';
   text: string;
 }
 
@@ -74,21 +68,23 @@ export interface ActiveGatewayCall {
   providerCallId: string;
   destinationNumber: string;
   promptSnapshot: string;
-  requestedLanguageMode: LanguageMode;
-  activeTranscriptionLanguage: LanguageMode;
-  lastReliableLanguage: SupportedLanguage;
+  languageProfileId: string;
   openingGreeting: string;
   callback: ProviderCallback;
   history: ConversationMessage[];
   transcript: Array<{
-    speaker: 'AI_AGENT' | 'REMOTE_PARTY';
+    speaker:
+      | 'AI_AGENT'
+      | 'REMOTE_PARTY';
     content: string;
   }>;
   createdAt: string;
   connectedSent: boolean;
+  openingReported: boolean;
   completedSent: boolean;
   lastCallerText?: string;
   lastCallerAtMs?: number;
-  reconnectAttempts: number;
-  timeout?: ReturnType<typeof setTimeout>;
+  timeout?: ReturnType<
+    typeof setTimeout
+  >;
 }

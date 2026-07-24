@@ -50,7 +50,7 @@ const initialState = {
   selectedTemplateId:
     null,
   languageCode:
-    'ta-IN',
+    'ta-en',
   scenarioId:
     'appointment-confirmed' as const,
 };

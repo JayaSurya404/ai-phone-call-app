@@ -58,6 +58,10 @@ import {
 } from './owner-store';
 
 import {
+  LanguageProfilePicker,
+} from './LanguageProfilePicker';
+
+import {
   ownerTheme,
 } from './owner-theme';
 
@@ -425,9 +429,9 @@ export function OwnerScreen() {
                 prompt,
 
               languageCode:
-                languageCode
-                  .trim() ||
-                'en-IN',
+                    languageCode
+                      .trim() ||
+                    'ta-en',
             });
 
           return startCall(
@@ -897,48 +901,14 @@ export function OwnerScreen() {
                   LANGUAGE
                 </Text>
 
-                <View
-                  style={
-                    styles.smallInputShell
+                <LanguageProfilePicker
+                  onSelect={
+                    setLanguageCode
                   }
-                >
-                  <Ionicons
-                    name="language-outline"
-                    size={18}
-                    color={
-                      ownerTheme
-                        .textMuted
-                    }
-                  />
-
-                  <TextInput
-                    autoCapitalize="none"
-                    placeholder="ta-IN"
-                    placeholderTextColor={
-                      ownerTheme.textDim
-                    }
-                    value={
-                      languageCode
-                    }
-                    onChangeText={
-                      setLanguageCode
-                    }
-                    style={
-                      styles.smallInput
-                    }
-                  />
-                </View>
-
-                <Text
-                  style={
-                    styles.scenarioSubtitle
+                  selectedId={
+                    languageCode
                   }
-                >
-                  Tamil: ta-IN
-                  {'  '}English: en-IN
-                  {'  '}Hindi: hi-IN
-                  {'  '}Auto EN/HI: multi
-                </Text>
+                />
               </View>
 
               <View
