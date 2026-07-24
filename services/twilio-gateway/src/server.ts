@@ -785,75 +785,170 @@ async function handleCallerTurn(
 async function verifyElevenLabs():
 Promise<{
   voiceName: string;
+  sttReady: boolean;
+  ttsReady: boolean;
 }> {
-  const userResponse =
-    await fetch(
-      'https://api.elevenlabs.io/v1/user',
+  // Probe the exact realtime STT
+  // connection used by calls.
+  const stt =
+    new ElevenLabsRealtimeStt({
+      apiKey:
+        environment
+          .elevenLabsApiKey,
 
-      {
-        headers: {
-          'xi-api-key':
-            environment
-              .elevenLabsApiKey,
+      modelId:
+        environment
+          .elevenLabsSttModel,
+
+      profile:
+        getLanguageProfile(
+          'en-in'
+        ),
+
+      callbacks: {
+        onPartial() {
+          // No audio is sent during
+          // this connectivity probe.
         },
-      }
-    );
 
-  if (!userResponse.ok) {
-    const body =
-      await userResponse.text();
+        onCommitted() {
+          // No audio is sent during
+          // this connectivity probe.
+        },
 
-    throw new Error(
-      body ||
+        onError(error) {
+          app.log.warn(
+            {
+              error:
+                error.message,
+            },
+
+            'ElevenLabs STT diagnostic warning.'
+          );
+        },
+      },
+    });
+
+  await stt.connect();
+  stt.close();
+
+  // Probe the exact TTS endpoint,
+  // voice, model, and telephone
+  // audio format used by calls.
+  const ttsUrl =
+    new URL(
       (
-        'ElevenLabs authentication failed with HTTP ' +
-        `${userResponse.status}.`
-      )
-    );
-  }
-
-  const voiceResponse =
-    await fetch(
-      (
-        'https://api.elevenlabs.io/v1/voices/' +
+        'https://api.elevenlabs.io/v1/text-to-speech/' +
         encodeURIComponent(
           environment
             .elevenLabsVoiceId
-        )
-      ),
+        ) +
+        '/stream'
+      )
+    );
 
+  ttsUrl.searchParams.set(
+    'output_format',
+    'ulaw_8000'
+  );
+
+  ttsUrl.searchParams.set(
+    'optimize_streaming_latency',
+    '3'
+  );
+
+  const ttsResponse =
+    await fetch(
+      ttsUrl,
       {
+        method: 'POST',
+
         headers: {
           'xi-api-key':
             environment
               .elevenLabsApiKey,
+
+          'content-type':
+            'application/json',
+
+          accept:
+            'audio/basic',
         },
+
+        body:
+          JSON.stringify({
+            text:
+              'Ready.',
+
+            model_id:
+              'eleven_flash_v2_5',
+
+            voice_settings: {
+              stability:
+                0.48,
+
+              similarity_boost:
+                0.78,
+
+              style:
+                0.18,
+
+              use_speaker_boost:
+                true,
+            },
+          }),
       }
     );
 
-  if (!voiceResponse.ok) {
+  if (!ttsResponse.ok) {
     const body =
-      await voiceResponse.text();
+      await ttsResponse.text();
 
     throw new Error(
       body ||
       (
-        'ElevenLabs voice lookup failed with HTTP ' +
-        `${voiceResponse.status}.`
+        'ElevenLabs TTS diagnostic returned HTTP ' +
+        ttsResponse.status +
+        '.'
       )
     );
   }
 
-  const voice =
-    await voiceResponse
-      .json() as {
-        name?: string;
-      };
+  if (!ttsResponse.body) {
+    throw new Error(
+      'ElevenLabs TTS diagnostic returned no audio.'
+    );
+  }
+
+  const reader =
+    ttsResponse.body
+      .getReader();
+
+  const firstChunk =
+    await reader.read();
+
+  await reader.cancel();
+
+  if (
+    firstChunk.done ||
+    !firstChunk.value ||
+    firstChunk.value.length ===
+      0
+  ) {
+    throw new Error(
+      'ElevenLabs TTS diagnostic returned an empty audio stream.'
+    );
+  }
 
   return {
     voiceName:
-      voice.name ??
-      'Configured voice',
+      'Voice verified by audio generation',
+
+    sttReady:
+      true,
+
+    ttsReady:
+      true,
   };
 }
 
@@ -1022,6 +1117,14 @@ app.get(
           voiceName:
             elevenLabs
               .voiceName,
+
+          sttReady:
+            elevenLabs
+              .sttReady,
+
+          ttsReady:
+            elevenLabs
+              .ttsReady,
 
           audioFormat:
             'ulaw_8000',
