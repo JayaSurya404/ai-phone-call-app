@@ -27,6 +27,111 @@ interface ScribeMessage {
   language_code?: string;
   error?: string;
   message?: string;
+  detail?: string | {
+    message?: string;
+  };
+}
+
+interface SingleUseTokenResponse {
+  token?: string;
+  detail?: string | {
+    message?: string;
+  };
+}
+
+function providerMessage(
+  value:
+    ScribeMessage |
+    SingleUseTokenResponse
+): string {
+  if (
+    typeof value.detail ===
+    'string'
+  ) {
+    return value.detail;
+  }
+
+  if (
+    typeof value.detail ===
+      'object' &&
+    value.detail?.message
+  ) {
+    return value.detail
+      .message;
+  }
+
+  if (
+    'error' in value &&
+    value.error
+  ) {
+    return value.error;
+  }
+
+  if (
+    'message' in value &&
+    value.message
+  ) {
+    return value.message;
+  }
+
+  return (
+    'ElevenLabs realtime STT returned an unknown error.'
+  );
+}
+
+async function createRealtimeScribeToken(
+  apiKey: string
+): Promise<string> {
+  const response =
+    await fetch(
+      (
+        'https://api.elevenlabs.io/' +
+        'v1/single-use-token/' +
+        'realtime_scribe'
+      ),
+      {
+        method: 'POST',
+
+        headers: {
+          'xi-api-key':
+            apiKey,
+        },
+      }
+    );
+
+  const raw =
+    await response.text();
+
+  let body:
+    SingleUseTokenResponse = {};
+
+  if (raw) {
+    try {
+      body =
+        JSON.parse(
+          raw
+        ) as
+        SingleUseTokenResponse;
+    } catch {
+      body = {
+        detail:
+          raw,
+      };
+    }
+  }
+
+  if (
+    !response.ok ||
+    !body.token
+  ) {
+    throw new Error(
+      providerMessage(
+        body
+      )
+    );
+  }
+
+  return body.token;
 }
 
 export function buildRealtimeSttUrl(
@@ -34,6 +139,7 @@ export function buildRealtimeSttUrl(
     modelId: string;
     profile:
       LanguageProfile;
+    token?: string;
   }
 ): string {
   const url =
@@ -98,6 +204,13 @@ export function buildRealtimeSttUrl(
     'true'
   );
 
+  if (options.token) {
+    url.searchParams.set(
+      'token',
+      options.token
+    );
+  }
+
   return url.toString();
 }
 
@@ -129,6 +242,11 @@ export class ElevenLabsRealtimeStt {
       return;
     }
 
+    const token =
+      await createRealtimeScribeToken(
+        this.options.apiKey
+      );
+
     const socket =
       new WebSocket(
         buildRealtimeSttUrl({
@@ -139,15 +257,9 @@ export class ElevenLabsRealtimeStt {
           profile:
             this.options
               .profile,
-        }),
 
-        {
-          headers: {
-            'xi-api-key':
-              this.options
-                .apiKey,
-          },
-        }
+          token,
+        })
       );
 
     this.socket =
@@ -158,86 +270,184 @@ export class ElevenLabsRealtimeStt {
         resolve,
         reject
       ) => {
+        let settled =
+          false;
+
         const timeout =
           setTimeout(
             () => {
+              if (settled) {
+                return;
+              }
+
+              settled =
+                true;
+
               reject(
                 new Error(
-                  'ElevenLabs STT WebSocket connection timed out.'
+                  (
+                    'ElevenLabs STT did not send session_started ' +
+                    'within 12 seconds.'
+                  )
                 )
               );
+
+              socket.close();
             },
-            10_000
+            12_000
           );
 
-        const finish =
+        const rejectSetup =
           (
-            callback:
-              () => void
+            error:
+              Error
           ) => {
+            if (settled) {
+              this.options
+                .callbacks
+                .onError(
+                  error
+                );
+
+              return;
+            }
+
+            settled =
+              true;
+
             clearTimeout(
               timeout
             );
 
-            callback();
+            reject(
+              error
+            );
           };
 
-        socket.once(
-          'open',
+        socket.on(
+          'message',
 
-          () => {
-            finish(resolve);
-          }
-        );
+          (data) => {
+            const raw =
+              data.toString();
 
-        socket.once(
-          'error',
+            let message:
+              ScribeMessage;
 
-          (error) => {
-            finish(
-              () => {
-                reject(error);
+            try {
+              message =
+                JSON.parse(
+                  raw
+                ) as
+                ScribeMessage;
+            } catch {
+              return;
+            }
+
+            if (
+              message.message_type ===
+              'session_started'
+            ) {
+              if (!settled) {
+                settled =
+                  true;
+
+                clearTimeout(
+                  timeout
+                );
+
+                resolve();
               }
+
+              return;
+            }
+
+            const isError =
+              (
+                message.message_type
+                  ?.includes(
+                    'error'
+                  ) ??
+                false
+              ) ||
+              Boolean(
+                message.error
+              ) ||
+              (
+                typeof message.detail ===
+                  'string' &&
+                message.detail !==
+                  ''
+              ) ||
+              (
+                typeof message.detail ===
+                  'object' &&
+                Boolean(
+                  message.detail
+                    ?.message
+                )
+              );
+
+            if (isError) {
+              rejectSetup(
+                new Error(
+                  providerMessage(
+                    message
+                  )
+                )
+              );
+
+              return;
+            }
+
+            if (!settled) {
+              return;
+            }
+
+            this.handleMessage(
+              message
             );
           }
         );
-      }
-    );
 
-    socket.on(
-      'message',
+        socket.on(
+          'error',
 
-      (data) => {
-        this.handleMessage(
-          data.toString()
+          (error) => {
+            rejectSetup(
+              error
+            );
+          }
         );
-      }
-    );
 
-    socket.on(
-      'error',
+        socket.on(
+          'close',
 
-      (error) => {
-        this.options
-          .callbacks
-          .onError(error);
-      }
-    );
+          (
+            code,
+            reason
+          ) => {
+            this.socket =
+              null;
 
-    socket.on(
-      'close',
+            if (
+              code === 1000 ||
+              code === 1005
+            ) {
+              if (!settled) {
+                rejectSetup(
+                  new Error(
+                    (
+                      'ElevenLabs STT closed before session_started.'
+                    )
+                  )
+                );
+              }
 
-      (
-        code,
-        reason
-      ) => {
-        if (
-          code !== 1000 &&
-          code !== 1005
-        ) {
-          this.options
-            .callbacks
-            .onError(
+              return;
+            }
+
+            rejectSetup(
               new Error(
                 (
                   `ElevenLabs STT closed with code ${code}: ` +
@@ -245,26 +455,16 @@ export class ElevenLabsRealtimeStt {
                 )
               )
             );
-        }
+          }
+        );
       }
     );
   }
 
   private handleMessage(
-    raw: string
+    message:
+      ScribeMessage
   ): void {
-    let message:
-      ScribeMessage;
-
-    try {
-      message =
-        JSON.parse(
-          raw
-        ) as ScribeMessage;
-    } catch {
-      return;
-    }
-
     const text =
       message.text?.trim() ??
       '';
@@ -317,29 +517,6 @@ export class ElevenLabsRealtimeStt {
           text,
           message
             .language_code
-        );
-
-      return;
-    }
-
-    if (
-      message.message_type
-        ?.includes(
-          'error'
-        ) ||
-      message.error
-    ) {
-      this.options
-        .callbacks
-        .onError(
-          new Error(
-            message.error ||
-            message.message ||
-            (
-              `ElevenLabs STT error: ` +
-              message.message_type
-            )
-          )
         );
     }
   }
