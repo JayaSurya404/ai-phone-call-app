@@ -927,7 +927,33 @@ Promise<{
   const firstChunk =
     await reader.read();
 
-  await reader.cancel();
+  try {
+    await reader.cancel();
+  } catch (error) {
+    // Cancelling after the first
+    // valid audio chunk can surface
+    // as AbortError in Node/undici.
+    // The probe has already passed,
+    // so this cancellation error is
+    // intentionally ignored.
+    if (
+      !(
+        error instanceof Error &&
+        error.name === 'AbortError'
+      )
+    ) {
+      app.log.warn(
+        {
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        },
+
+        'TTS diagnostic stream cancellation warning.'
+      );
+    }
+  }
 
   if (
     firstChunk.done ||
@@ -1055,80 +1081,158 @@ app.get(
         });
     }
 
+    let geminiResult:
+      {
+        ready: boolean;
+        model: string;
+        response?: string;
+        error?: string;
+      };
+
     try {
-      const [
-        geminiReply,
-        elevenLabs,
-      ] =
-        await Promise.all([
-          generateGeminiReply({
-            apiKey:
-              environment
-                .geminiApiKey,
+      const response =
+        await generateGeminiReply({
+          apiKey:
+            environment
+              .geminiApiKey,
 
-            model:
-              environment
-                .geminiModel,
+          model:
+            environment
+              .geminiModel,
 
-            systemPrompt:
-              (
-                'This is a connectivity test. ' +
-                'Reply with READY only.'
-              ),
+          timeoutMs:
+            30_000,
 
-            history: [
-              {
-                role: 'user',
-                text:
-                  'Test now.',
-              },
-            ],
-          }),
+          systemPrompt:
+            (
+              'This is a connectivity test. ' +
+              'Reply with READY only.'
+            ),
 
-          verifyElevenLabs(),
-        ]);
+          history: [
+            {
+              role: 'user',
+              text:
+                'Test now.',
+            },
+          ],
+        });
 
-      return {
-        status: 'ready',
+      geminiResult = {
+        ready:
+          true,
+
+        model:
+          environment
+            .geminiModel,
+
+        response,
+      };
+    } catch (error) {
+      geminiResult = {
+        ready:
+          false,
+
+        model:
+          environment
+            .geminiModel,
+
+        error:
+          error instanceof Error
+            ? error.message
+            : String(error),
+      };
+    }
+
+    let elevenLabsResult:
+      {
+        ready: boolean;
+        sttModel: string;
+        voiceId: string;
+        sttReady?: boolean;
+        ttsReady?: boolean;
+        voiceName?: string;
+        audioFormat: string;
+        error?: string;
+      };
+
+    try {
+      const result =
+        await verifyElevenLabs();
+
+      elevenLabsResult = {
+        ready:
+          true,
+
+        sttModel:
+          environment
+            .elevenLabsSttModel,
+
+        voiceId:
+          environment
+            .elevenLabsVoiceId,
+
+        sttReady:
+          result.sttReady,
+
+        ttsReady:
+          result.ttsReady,
+
+        voiceName:
+          result.voiceName,
+
+        audioFormat:
+          'ulaw_8000',
+      };
+    } catch (error) {
+      elevenLabsResult = {
+        ready:
+          false,
+
+        sttModel:
+          environment
+            .elevenLabsSttModel,
+
+        voiceId:
+          environment
+            .elevenLabsVoiceId,
+
+        audioFormat:
+          'ulaw_8000',
+
+        error:
+          error instanceof Error
+            ? error.message
+            : String(error),
+      };
+    }
+
+    const ready =
+      geminiResult.ready &&
+      elevenLabsResult.ready;
+
+    return reply
+      .code(
+        ready
+          ? 200
+          : 503
+      )
+      .send({
+        status:
+          ready
+            ? 'ready'
+            : 'not-ready',
 
         twilioConfigured:
           environment
             .twilioAccountSid
             .startsWith('AC'),
 
-        gemini: {
-          model:
-            environment
-              .geminiModel,
+        gemini:
+          geminiResult,
 
-          response:
-            geminiReply,
-        },
-
-        elevenLabs: {
-          sttModel:
-            environment
-              .elevenLabsSttModel,
-
-          voiceId:
-            environment
-              .elevenLabsVoiceId,
-
-          voiceName:
-            elevenLabs
-              .voiceName,
-
-          sttReady:
-            elevenLabs
-              .sttReady,
-
-          ttsReady:
-            elevenLabs
-              .ttsReady,
-
-          audioFormat:
-            'ulaw_8000',
-        },
+        elevenLabs:
+          elevenLabsResult,
 
         mediaPipeline:
           'twilio-media-streams',
@@ -1139,20 +1243,7 @@ app.get(
         maxCallSeconds:
           environment
             .maxCallSeconds,
-      };
-    } catch (error) {
-      return reply
-        .code(502)
-        .send({
-          status:
-            'not-ready',
-
-          message:
-            error instanceof Error
-              ? error.message
-              : String(error),
-        });
-    }
+      });
   }
 );
 
