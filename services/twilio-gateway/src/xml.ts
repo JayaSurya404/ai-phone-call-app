@@ -1,3 +1,7 @@
+import {
+  transcriptionCode,
+} from './language.js';
+
 import type {
   LanguageMode,
 } from './types.js';
@@ -35,13 +39,6 @@ export interface ConversationRelayTwimlOptions {
   actionUrl: string;
   languageMode:
     LanguageMode;
-
-  // Retained for compatibility
-  // with the existing server
-  // configuration. The safe
-  // TwiML intentionally lets
-  // Twilio select its current
-  // default voice per language.
   englishVoice: string;
   tamilVoice: string;
   hindiVoice: string;
@@ -50,25 +47,30 @@ export interface ConversationRelayTwimlOptions {
 function languageHint(
   code: string
 ): string {
-  // The parent relay owns the
-  // Deepgram Flux and ElevenLabs
-  // provider configuration.
-  // Child Language elements are
-  // only language hints in multi
-  // mode. Do not override Flux or
-  // voices here because invalid
-  // provider/model combinations
-  // terminate the relay.
   return (
     `      <Language ` +
     `code="${escapeXml(code)}" />`
   );
 }
 
-function commonAttributes(
+export function buildConversationRelayTwiml(
   options:
     ConversationRelayTwimlOptions
-): string[] {
+): string {
+  const automaticMode =
+    options.languageMode ===
+    'multi';
+
+  const sttLanguage =
+    transcriptionCode(
+      options.languageMode
+    );
+
+  const speechModel =
+    automaticMode
+      ? 'flux'
+      : 'nova-3-general';
+
   const attributes = [
     (
       `url="${escapeXml(
@@ -77,29 +79,31 @@ function commonAttributes(
     ),
 
     (
-      `welcomeGreetingInterruptible="speech"`
-    ),
-
-    (
-      `language="${escapeXml(
-        options.languageMode
+      `welcomeGreeting="${escapeXml(
+        options.welcomeGreeting
       )}"`
     ),
 
-    (
-      `ttsLanguage="${escapeXml(
-        options.languageMode
-      )}"`
-    ),
+    'welcomeGreetingInterruptible="speech"',
+
+    // ElevenLabs detects Tamil,
+    // English, and mixed output
+    // from each text token.
+    'ttsLanguage="multi"',
 
     (
       `transcriptionLanguage="${escapeXml(
-        options.languageMode
+        sttLanguage
       )}"`
     ),
 
     'ttsProvider="ElevenLabs"',
     'transcriptionProvider="Deepgram"',
+
+    (
+      `speechModel="${speechModel}"`
+    ),
+
     'speechTimeout="900"',
     'interruptible="speech"',
     'interruptSensitivity="medium"',
@@ -108,54 +112,22 @@ function commonAttributes(
     'deepgramSmartFormat="true"',
   ];
 
-  if (
-    options.welcomeGreeting
-  ) {
+  if (automaticMode) {
     attributes.push(
-      (
-        `welcomeGreeting="${escapeXml(
-          options.welcomeGreeting
-        )}"`
-      )
-    );
-  }
-
-  if (
-    options.languageMode ===
-    'multi'
-  ) {
-    attributes.push(
-      'speechModel="flux"',
       'partialPrompts="false"'
     );
   }
 
-  return attributes;
-}
-
-export function buildConversationRelayTwiml(
-  options:
-    ConversationRelayTwimlOptions
-): string {
-  const relayAttributes =
-    commonAttributes(options)
-      .join(' ');
-
+  // Flux automatic language
+  // detection supports English
+  // and Hindi, but not Tamil.
+  // Tamil uses fixed ta +
+  // Nova-3 mode instead.
   const languageHints =
-    options.languageMode ===
-      'multi'
+    automaticMode
       ? [
-          languageHint(
-            'en-IN'
-          ),
-
-          languageHint(
-            'ta-IN'
-          ),
-
-          languageHint(
-            'hi-IN'
-          ),
+          languageHint('en'),
+          languageHint('hi'),
         ]
       : [];
 
@@ -172,7 +144,7 @@ export function buildConversationRelayTwiml(
 
     (
       `    <ConversationRelay ` +
-      `${relayAttributes}>`
+      `${attributes.join(' ')}>`
     ),
 
     ...languageHints,

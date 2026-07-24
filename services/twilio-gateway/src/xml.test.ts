@@ -32,64 +32,7 @@ const baseOptions = {
 };
 
 test(
-  'multi TwiML uses Flux only on the parent relay',
-  () => {
-    const twiml =
-      buildConversationRelayTwiml({
-        ...baseOptions,
-        languageMode:
-          'multi',
-      });
-
-    assert.match(
-      twiml,
-      /language="multi"/
-    );
-
-    assert.match(
-      twiml,
-      /ttsProvider="ElevenLabs"/
-    );
-
-    assert.match(
-      twiml,
-      /transcriptionProvider="Deepgram"/
-    );
-
-    assert.match(
-      twiml,
-      /speechModel="flux"/
-    );
-
-    assert.match(
-      twiml,
-      /<Language code="en-IN" \/>/
-    );
-
-    assert.match(
-      twiml,
-      /<Language code="ta-IN" \/>/
-    );
-
-    assert.match(
-      twiml,
-      /<Language code="hi-IN" \/>/
-    );
-
-    assert.doesNotMatch(
-      twiml,
-      /<Language[^>]+speechModel=/
-    );
-
-    assert.doesNotMatch(
-      twiml,
-      /<Language[^>]+voice=/
-    );
-  }
-);
-
-test(
-  'fixed-language TwiML omits Flux',
+  'Tamil mode uses fixed Tamil Nova-3 STT and multilingual TTS',
   () => {
     const twiml =
       buildConversationRelayTwiml({
@@ -100,7 +43,17 @@ test(
 
     assert.match(
       twiml,
-      /language="ta-IN"/
+      /transcriptionLanguage="ta"/
+    );
+
+    assert.match(
+      twiml,
+      /ttsLanguage="multi"/
+    );
+
+    assert.match(
+      twiml,
+      /speechModel="nova-3-general"/
     );
 
     assert.doesNotMatch(
@@ -116,22 +69,59 @@ test(
 );
 
 test(
-  'TwiML escapes dynamic values',
+  'automatic mode uses Flux only for English and Hindi hints',
+  () => {
+    const twiml =
+      buildConversationRelayTwiml({
+        ...baseOptions,
+        languageMode:
+          'multi',
+      });
+
+    assert.match(
+      twiml,
+      /transcriptionLanguage="multi"/
+    );
+
+    assert.match(
+      twiml,
+      /speechModel="flux"/
+    );
+
+    assert.match(
+      twiml,
+      /<Language code="en" \/>/
+    );
+
+    assert.match(
+      twiml,
+      /<Language code="hi" \/>/
+    );
+
+    assert.doesNotMatch(
+      twiml,
+      /Language code="ta/
+    );
+  }
+);
+
+test(
+  'dynamic values are XML escaped',
   () => {
     const twiml =
       buildConversationRelayTwiml({
         ...baseOptions,
 
         languageMode:
-          'multi',
+          'ta-IN',
 
         welcomeGreeting:
-          'Hello & welcome.',
+          'à®µà®£à®•à¯à®•à®®à¯ & welcome',
       });
 
     assert.match(
       twiml,
-      /Hello &amp; welcome\./
+      /à®µà®£à®•à¯à®•à®®à¯ &amp; welcome/
     );
   }
 );

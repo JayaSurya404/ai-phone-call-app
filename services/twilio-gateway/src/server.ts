@@ -140,30 +140,52 @@ async function completeCall(call: ActiveGatewayCall): Promise<void> {
 function sendText(
   socket: WebSocket,
   text: string,
-  language: SupportedLanguage,
+  _language:
+    SupportedLanguage
 ): void {
   socket.send(
     JSON.stringify({
       type: 'text',
       token: text,
       last: true,
-      lang: language,
+
+      // ElevenLabs performs
+      // automatic Tamil/English/
+      // Hindi output detection.
+      lang: 'multi',
+
       interruptible: true,
       preemptible: true,
-    }),
+    })
   );
 }
 
 function switchSessionLanguage(
   socket: WebSocket,
-  language: LanguageMode,
+  language:
+    LanguageMode
 ): void {
+  const transcriptionLanguage =
+    language === 'ta-IN'
+      ? 'ta'
+      : language === 'hi-IN'
+        ? 'hi'
+        : language === 'en-IN'
+          ? 'en-IN'
+          : 'multi';
+
   socket.send(
     JSON.stringify({
       type: 'language',
-      ttsLanguage: language,
-      transcriptionLanguage: language,
-    }),
+
+      // Keep TTS multilingual so
+      // Tamil plus English words
+      // are spoken naturally.
+      ttsLanguage:
+        'multi',
+
+      transcriptionLanguage,
+    })
   );
 }
 

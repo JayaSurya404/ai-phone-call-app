@@ -913,6 +913,10 @@ export function OwnerScreen() {
 
                   <TextInput
                     autoCapitalize="none"
+                    placeholder="ta-IN"
+                    placeholderTextColor={
+                      ownerTheme.textDim
+                    }
                     value={
                       languageCode
                     }
@@ -924,6 +928,17 @@ export function OwnerScreen() {
                     }
                   />
                 </View>
+
+                <Text
+                  style={
+                    styles.scenarioSubtitle
+                  }
+                >
+                  Tamil: ta-IN
+                  {'  '}English: en-IN
+                  {'  '}Hindi: hi-IN
+                  {'  '}Auto EN/HI: multi
+                </Text>
               </View>
 
               <View
